@@ -34,7 +34,6 @@ const App = () => {
       // Extends WebViewer to allow loading media files (.mp3, .mp4, ogg, webm, etc.)
       const {
         loadAudio,
-        redactAudio,
       } = await initializeAudioViewer(
         instance,
         { license },
@@ -89,8 +88,6 @@ const App = () => {
         }
         once = true;
 
-
-        await redactAudio([ { start: 0.5, end: 2.0 }, { start: 2.5, end: 4.0 } ]);
         // Make a GET request to get XFDF string
         // const loadXfdfString = documentId => {
         //   return new Promise(resolve => {

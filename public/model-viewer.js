@@ -1,0 +1,1 @@
+/Users/kristianhein/Documents/Projects/model-viewer/packages/model-viewer/dist/model-viewer.js

@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "webviewer-audio",
+    "site": "webviewer-3d",
     "public": "build",
     "ignore": [
       "firebase.json",

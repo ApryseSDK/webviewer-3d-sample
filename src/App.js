@@ -1,9 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import WebViewer from '@pdftron/webviewer';
-import { initializeAudioViewer } from '@pdftron/webviewer-audio';
+import { initialize3dViewer } from '@pdftron/webviewer-3d';
 import './App.css';
-
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const DOCUMENT_ID = 'audio';
 
@@ -27,23 +25,22 @@ const App = () => {
       const { setHeaderItems, annotManager } = instance;
 
       instance.setTheme('dark');
-      // safari check due to a bug in webviewer
-      !isSafari && instance.openElements('notesPanel');
 
       const license = `---- Insert commercial license key here after purchase ----`;
       // Extends WebViewer to allow loading media files (.mp3, .mp4, ogg, webm, etc.)
       const {
-        loadAudio,
-      } = await initializeAudioViewer(
+        loadModel,
+      } =
+      await initialize3dViewer(
         instance,
         { license },
       );
 
-      // Load a media element at a specific url. Can be a local or public link
-      // If local it needs to be relative to lib/ui/index.html.
-      // Or at the root. (eg '/audio.mp3')
-      const audioUrl = '/audio.mp3';
-      loadAudio(audioUrl);
+      // // Load a media element at a specific url. Can be a local or public link
+      // // If local it needs to be relative to lib/ui/index.html.
+      // // Or at the root. (eg '/audio.mp3')
+      // const audioUrl = '/audio.mp3';
+      loadModel();
 
       const { docViewer } = instance;
 
@@ -53,7 +50,7 @@ const App = () => {
           type: 'actionButton',
           img: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M0 0h24v24H0z" fill="none"/><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>',
           title: 'Save Annotations',
-          disable: true,
+          // disable: true,
           onClick: async () => {
             // Save annotations when button is clicked
             // widgets and links will remain in the document without changing so it isn't necessary to export them
@@ -80,15 +77,11 @@ const App = () => {
         });
       });
 
-      let once = false;
       // Load saved annotations
-      docViewer.on('pageComplete', async () => {
-        if (once) {
-          return;
-        }
-        once = true;
-
-        // Make a GET request to get XFDF string
+      // Wait until events are attached for the audio viewer before
+      // importing annotations
+      docViewer.on('documentLoaded', () => {
+        // // Make a GET request to get XFDF string
         // const loadXfdfString = documentId => {
         //   return new Promise(resolve => {
         //     fetch(`/server/annotationHandler.js?documentId=${documentId}`, {
@@ -114,12 +107,9 @@ const App = () => {
 
         // loadXfdfString(DOCUMENT_ID)
         //   .then(xfdfString => {
-        setTimeout(() => {
-          const xfdfString = `<?xml version="1.0" encoding="UTF-8" ?><xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve"><annots><text page="0" rect="0,609,31,640" color="#ADB5BD" flags="print,nozoom,norotate" name="wavesurfer_4n5ikq5l768" title="Guest" subject="Note" date="D:20210118232225-08'00'" start-time="3.3887378842905305" end-time="7.127233380065879" audio-tool-type="AudioRedactTool" creationdate="D:20210118155358-08'00'" icon="Comment" statemodel="Review"><trn-custom-data bytes="{&quot;trn-mention&quot;:{&quot;contents&quot;:&quot;This a redaction. Select the region on the waveform and click on the redaction button to apply it.&quot;,&quot;ids&quot;:[]}}"/><contents>This a redaction. Select the region on the waveform and click on the redaction button to apply it.</contents></text><text page="0" rect="0,609,31,640" color="#FFCD45" flags="print,nozoom,norotate" name="wavesurfer_14ria836tg" title="Guest" subject="Note" date="D:20210118232252-08'00'" start-time="12.31996818656027" end-time="18.358776757746135" audio-tool-type="AudioCommentTool" creationdate="D:20210118232237-08'00'" icon="Comment" statemodel="Review"><trn-custom-data bytes="{&quot;trn-mention&quot;:{&quot;contents&quot;:&quot;This is a comment.&quot;,&quot;ids&quot;:[]}}"/><contents>This is a comment.</contents></text><text page="0" rect="0,609,31,640" color="#25D2D1" flags="print,nozoom,norotate" name="wavesurfer_2jrrhutfk6o" title="Guest" subject="Note" date="D:20210119010629-08'00'" start-time="21.465881582754626" end-time="23.921496686390373" audio-tool-type="AudioCommentTool2" creationdate="D:20210118232306-08'00'" icon="Comment" statemodel="Review"><trn-custom-data bytes="{&quot;trn-mention&quot;:{&quot;contents&quot;:&quot;Double-click a region to play it.&quot;,&quot;ids&quot;:[]}}"/><contents>Double-click a region to play it.</contents></text></annots></xfdf>`;
-          const annotManager = docViewer.getAnnotationManager();
-          return annotManager.importAnnotations(xfdfString);
-        }, 1000);
-        // });
+        //     const annotManager = docViewer.getAnnotationManager();
+        //     return annotManager.importAnnotations(xfdfString);
+        //   });
       });
     });
   }, []);

@@ -1,10 +1,10 @@
 {
-  "name": "webviewer-audio-sample",
+  "name": "webviewer-3d-sample",
   "version": "1.0.0",
   "dependencies": {
     "@babel/core": "7.1.0",
     "@pdftron/webviewer": "^7.2.0",
-    "@pdftron/webviewer-3d": "file:../WebViewer-3d",
+    "@pdftron/webviewer-3d": "^1.0.0",
     "@svgr/webpack": "2.4.1",
     "babel-core": "7.0.0-bridge.0",
     "babel-eslint": "9.0.0",

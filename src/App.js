@@ -39,7 +39,7 @@ const App = () => {
       // Load a model at a specific url. Can be a local or public link
       // If local it needs to be relative to lib/ui/index.html.
       // Or at the root. (eg '/scene.gltf');
-      loadModel("../../../assets/car2/scene.gltf");
+      loadModel("../../../assets/car/scene.gltf");
 
       const { docViewer } = instance;
 

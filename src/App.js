@@ -39,7 +39,7 @@ const App = () => {
       // Load a model at a specific url. Can be a local or public link
       // If local it needs to be relative to lib/ui/index.html.
       // Or at the root. (eg '/scene.gltf');
-      loadModel("../../../assets/car/scene.gltf");
+      loadModel("../../../assets/car2/scene.gltf");
 
       const { docViewer } = instance;
 
@@ -80,6 +80,7 @@ const App = () => {
       // Wait until events are attached for the audio viewer before
       // importing annotations
       docViewer.on('documentLoaded', () => {
+        // instance.setToolMode('AnnotationCreateRectangle3');
         // // Make a GET request to get XFDF string
         // const loadXfdfString = documentId => {
         //   return new Promise(resolve => {

@@ -2,6 +2,8 @@
 
 WebViewer 3D allows you to view, annotate and collaborate on 3D models. You can toggle visibility of the objects, switch to wireframe, vertex normals or rendered views of the 3D model. You can use the same [annotation capabilities](https://www.pdftron.com/webviewer/demo/) as you do on PDFs, MS Office and video.
 
+Check out [the online demo](https://webviewer-3d.web.app/) here for WebViewer 3D.
+
 This sample uses the [3D addon](https://www.npmjs.com/package/@pdftron/webviewer-3d) for WebViewer. It allows the loading of 3D models in .gltf or .glb formats.
 
 This repo is specifically designed for any users interested in integrating WebViewer into React project. This project was generated with Create React App. See Create React App documentation for more information.

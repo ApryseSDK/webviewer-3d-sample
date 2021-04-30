@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@pdftron/webviewer": "^7.0.0",
+    "@pdftron/webviewer": "^8.0.0-20210324",
     "@pdftron/webviewer-3d": "^1.1.1",
     "react": "^16.6.0",
     "react-dom": "^16.6.0",
@@ -19,6 +19,8 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
+    "clean": "rm -rf node_modules/ package-lock.json",
+    "deploy": "firebase deploy --only hosting:webviewer-3d",
     "postinstall": "node tools/copy-webviewer-files.js"
   },
   "eslintConfig": {

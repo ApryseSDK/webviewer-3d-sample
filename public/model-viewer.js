@@ -57915,28 +57915,53 @@ class Renderer extends EventDispatcher {
             y: (event.clientY - rect.top) * this.canvasElement.height / rect.height,
         };
     }
-    startDistanceMeasurement(e) {
-        const firstPoint = this.onDocumentMouseDown(e);
-        if (firstPoint) {
+    startDistanceMeasurement(e, measurementHexColor = '0x000000', selectedHexColor = '0xffff00') {
+        const returnValue = this.onDocumentMouseDown(e, measurementHexColor, selectedHexColor);
+        if (returnValue) {
+            const { point: firstPoint, snapIndicator: firstSnapIndicator, } = returnValue;
+            const group = new Group();
+            group.name = 'measurement_group';
+            firstSnapIndicator.name = 'measurement_entity';
+            group.add(firstSnapIndicator);
+            const scene = this.scenes.values().next().value;
+            scene.add(group);
+            scene.isDirty = true;
             const endDistanceMeasurement = _e => {
-                const secondPoint = this.onDocumentMouseDown(_e);
-                if (secondPoint) {
+                const returnValue2 = this.onDocumentMouseDown(_e, measurementHexColor, selectedHexColor);
+                if (returnValue2) {
+                    const { point: secondPoint, snapIndicator: secondSnapIndicator, } = returnValue2;
                     const positions = [];
+                    const geometry = new LineGeometry();
                     positions.push(firstPoint.x, firstPoint.y, firstPoint.z);
                     positions.push(secondPoint.x, secondPoint.y, secondPoint.z);
-                    const geometry = new LineGeometry();
+                    const setColors = (hex) => {
+                        const colors = [];
+                        const color1 = new Color();
+                        const color2 = new Color();
+                        color1.setHex(hex);
+                        color2.setHex(hex);
+                        colors.push(color1.r, color1.g, color1.b);
+                        colors.push(color2.r, color2.g, color2.b);
+                        geometry.setColors(colors);
+                    };
                     geometry.setPositions(positions);
-                    // geometry.setColors( colors );
+                    setColors(measurementHexColor);
                     const matLine = new LineMaterial({
-                        color: 0x000000,
+                        color: 0xffffff,
                         linewidth: 0.005,
                         vertexColors: true,
-                        dashed: false
+                        dashed: false,
                     });
                     const line = new Line2(geometry, matLine);
                     line.computeLineDistances();
                     // line.scale.set( 1, 1, 1 );
                     line.name = 'measurement_line';
+                    line.highlight = () => {
+                        setColors(selectedHexColor);
+                    };
+                    line.unhighlight = () => {
+                        setColors(measurementHexColor);
+                    };
                     // const material = new LineBasicMaterial({
                     //   // color: 0xffffff,
                     //   color: 0xfff0000,
@@ -57961,7 +57986,6 @@ class Renderer extends EventDispatcher {
                     // //   // console.log('onbefore!!!!!!!!');
                     // //   renderer.clearDepth();
                     // // };
-                    const scene = this.scenes.values().next().value;
                     // scene.traverse(child => {
                     //   if (child.isMesh && child.name !== 'measurement_line') {
                     //     // child.material.depthWrite = false;
@@ -57970,31 +57994,55 @@ class Renderer extends EventDispatcher {
                     //     // child.material.polygonOffsetFactor = 1;
                     //   }
                     // });
-                    scene.add(line);
-                    const snapIndicator = new Mesh(new SphereGeometry(0.04), new MeshBasicMaterial({ color: 0xff0000 }));
-                    snapIndicator.name = 'measurement_line';
-                    scene.add(snapIndicator);
-                    // https://stackoverflow.com/a/58580387
-                    let dir = secondPoint.clone().sub(firstPoint);
-                    const length = dir.length();
-                    dir = dir.normalize().multiplyScalar(length * .5);
-                    const midPoint = firstPoint.clone().add(dir);
-                    snapIndicator.position.copy(midPoint);
-                    const newMidPoint = midPoint.clone();
-                    newMidPoint.project(scene.getCamera());
+                    // scene.add(line);
+                    // midpoint
+                    // const snapIndicator = new Mesh(
+                    //     new SphereGeometry(0.04),
+                    //     new MeshStandardMaterial({color: 0xff0000}),
+                    // );
+                    // snapIndicator.name = 'measurement_line';
+                    secondSnapIndicator.name = 'measurement_entity';
+                    line.name = 'measurement_entity';
+                    group.add(secondSnapIndicator);
+                    group.add(line);
+                    // // https://stackoverflow.com/a/58580387
+                    // let dir = secondPoint.clone().sub(firstPoint);
+                    // const length = dir.length();
+                    // dir = dir.normalize().multiplyScalar(length * .5);
+                    // const midPoint = firstPoint.clone().add(dir);
+                    // snapIndicator.position.copy(midPoint);
+                    // const newMidPoint = midPoint.clone();
+                    // newMidPoint.project(scene.getCamera());
+                    scene.isDirty = true;
                     return {
-                        midPoint: newMidPoint,
+                        remove3dEntity: () => scene.remove(group),
+                        length: secondPoint.clone().sub(firstPoint).length(),
+                        selectMeasurement: () => {
+                            group.children.forEach(mesh => {
+                                mesh.highlight();
+                            });
+                            scene.isDirty = true;
+                        },
+                        deselectMeasurement: () => {
+                            group.children.forEach(mesh => {
+                                mesh.unhighlight();
+                            });
+                            scene.isDirty = true;
+                        }
                     };
                 }
                 else {
                     return endDistanceMeasurement;
                 }
             };
-            return endDistanceMeasurement;
+            return {
+                endDistanceMeasurement,
+                cleanup: () => scene.remove(group),
+            };
         }
         return null;
     }
-    onDocumentMouseDown(event) {
+    onDocumentMouseDown(event, measurementHexColor, selectedHexColor) {
         const pos = this.getCanvasRelativePosition(event);
         const mouse = {
             x: (pos.x / this.canvasElement.width) * 2 - 1,
@@ -58004,21 +58052,26 @@ class Renderer extends EventDispatcher {
         // update the picking ray with the camera and mouse position
         raycaster$1.setFromCamera(mouse, scene.getCamera());
         // calculate objects intersecting the picking ray
-        // scene.children(child => child.name !== 'measurement_line');
-        const intersects = raycaster$1.intersectObjects(scene.children.filter(child => child.name !== 'measurement_line'), true);
+        const intersects = raycaster$1.intersectObjects(scene.children.filter(child => child.name !== 'measurement_group'), true);
         const firstInt = intersects[0];
-        console.log('firstInt', firstInt);
         if (typeof firstInt !== 'undefined') {
-            const snapIndicator = new Mesh(new SphereGeometry(0.04), new MeshBasicMaterial({ color: 0xff0000 }));
-            snapIndicator.name = 'measurement_line';
-            scene.add(snapIndicator);
+            const snapIndicator = new Mesh(new SphereGeometry(0.03), new MeshBasicMaterial());
+            snapIndicator.material.color.setHex(measurementHexColor);
+            snapIndicator.highlight = () => {
+                console.log('highlight', selectedHexColor);
+                snapIndicator.material.color.setHex(selectedHexColor);
+            };
+            snapIndicator.unhighlight = () => {
+                console.log('unhighlight', measurementHexColor);
+                snapIndicator.material.color.setHex(measurementHexColor);
+            };
             // point is in world space
             snapIndicator.position.copy(firstInt.point);
             // // if we wanted local space then we would use this
             // firstInt.object.worldToLocal(firstInt.point.clone())
-            // For re-rendering
-            scene.isDirty = true;
-            return firstInt.point.clone();
+            return {
+                point: firstInt.point.clone(), snapIndicator,
+            };
         }
         return null;
     }
@@ -58026,7 +58079,7 @@ class Renderer extends EventDispatcher {
         const scene = this.scenes.values().next().value;
         const funcs = [];
         scene.traverse(child => {
-            if (child.isMesh) {
+            if (child.isMesh && child.name !== 'measurement_entity') {
                 const vn = new VertexNormalsHelper(child, 0.05, 0xff0000);
                 // vn.name = 'vertexNormalHelper';
                 // const wireframeMaterial = new LineBasicMaterial({color: 0xFFFFFF});
@@ -58047,7 +58100,7 @@ class Renderer extends EventDispatcher {
         // https://stackoverflow.com/questions/37280995/threejs-remove-texture
         const wireframeMaterial = new MeshBasicMaterial({ color: 0xffffff, wireframe: true });
         scene.traverse(child => {
-            if (child.isMesh) {
+            if (child.isMesh && child.name !== 'measurement_entity') {
                 if (willSet) {
                     child.oldMaterial = child.material;
                     child.material = wireframeMaterial;
@@ -58066,7 +58119,7 @@ class Renderer extends EventDispatcher {
         const scene = this.scenes.values().next().value;
         const funcs = [];
         scene.traverse(child => {
-            if (child.isMesh) {
+            if (child.isMesh && child.name !== 'measurement_entity') {
                 const wireframeGeometry = new WireframeGeometry(child.geometry);
                 const wireframeMaterial = new LineBasicMaterial({ color: 0xFFFFFF });
                 const wireframe = new LineSegments(wireframeGeometry, wireframeMaterial);
@@ -61187,8 +61240,8 @@ const ControlsMixin = (ModelViewerElement) => {
         // toggleWireframeAndModel(): void {
         //   this[$renderer].toggleWireframeAndModel();
         // }
-        startDistanceMeasurement(e) {
-            return this[$renderer].startDistanceMeasurement(e);
+        startDistanceMeasurement(e, measurementHexColor, selectedHexColor) {
+            return this[$renderer].startDistanceMeasurement(e, measurementHexColor, selectedHexColor);
         }
         getChildren() {
             return this[$renderer].getChildren();

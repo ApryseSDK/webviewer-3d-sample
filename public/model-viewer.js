@@ -57862,8 +57862,6 @@ class Renderer extends EventDispatcher {
         this.dpr = resolveDpr();
         this.canvasElement = document.createElement('canvas');
         this.canvasElement.id = 'webgl-canvas';
-        // window.addEventListener(
-        //     'mousedown', this.onDocumentMouseDown.bind(this), false);
         this.canvas3D = 
             this.canvasElement;
         this.canvas3D.addEventListener('webglcontextlost', this.onWebGLContextLost);
@@ -57916,9 +57914,8 @@ class Renderer extends EventDispatcher {
         };
     }
     startDistanceMeasurement(e, measurementHexColor = '0x000000', selectedHexColor = '0xffff00') {
-        const returnValue = this.onDocumentMouseDown(e, measurementHexColor, selectedHexColor);
-        if (returnValue) {
-            const { point: firstPoint, snapIndicator: firstSnapIndicator, } = returnValue;
+        const { hit: startHit, point: firstPoint, snapIndicator: firstSnapIndicator, } = this.onDocumentMouseDown(e, measurementHexColor, selectedHexColor);
+        if (startHit) {
             const group = new Group();
             group.name = 'measurement_group';
             firstSnapIndicator.name = 'measurement_entity';
@@ -57927,9 +57924,10 @@ class Renderer extends EventDispatcher {
             scene.add(group);
             scene.isDirty = true;
             const endDistanceMeasurement = _e => {
-                const returnValue2 = this.onDocumentMouseDown(_e, measurementHexColor, selectedHexColor);
-                if (returnValue2) {
-                    const { point: secondPoint, snapIndicator: secondSnapIndicator, } = returnValue2;
+                const { hit: endHit, point: secondPoint, snapIndicator: secondSnapIndicator, } = this.onDocumentMouseDown(_e, measurementHexColor, selectedHexColor);
+                if (!endHit)
+                    return { hit: false };
+                if (endHit) {
                     const positions = [];
                     const geometry = new LineGeometry();
                     positions.push(firstPoint.x, firstPoint.y, firstPoint.z);
@@ -57962,45 +57960,6 @@ class Renderer extends EventDispatcher {
                     line.unhighlight = () => {
                         setColors(measurementHexColor);
                     };
-                    // const material = new LineBasicMaterial({
-                    //   // color: 0xffffff,
-                    //   color: 0xfff0000,
-                    //   // linewidth: 500, // doesn't work lol
-                    //   // depthTest: false,
-                    //   // depthWrite: false,
-                    // });
-                    // // material.polygonOffset = true;
-                    // // material.polygonOffsetUnits = 1;
-                    // // material.polygonOffsetFactor = 1;
-                    // // material.depthTest = false;
-                    // const points = [];
-                    // points.push(firstPoint);
-                    // points.push(secondPoint);
-                    // const geometry = new BufferGeometry().setFromPoints(points);
-                    // const line = new Line(geometry, material);
-                    // line.name = 'measurement_line';
-                    // line.renderOrder = 9999;
-                    // // console.log('renderOrder', line.renderOrder);
-                    // // line.renderOrder = 999;
-                    // // line.onBeforeRender = function( renderer ) {
-                    // //   // console.log('onbefore!!!!!!!!');
-                    // //   renderer.clearDepth();
-                    // // };
-                    // scene.traverse(child => {
-                    //   if (child.isMesh && child.name !== 'measurement_line') {
-                    //     // child.material.depthWrite = false;
-                    //     // child.material.polygonOffset = true;
-                    //     // child.material.polygonOffsetUnits = 1;
-                    //     // child.material.polygonOffsetFactor = 1;
-                    //   }
-                    // });
-                    // scene.add(line);
-                    // midpoint
-                    // const snapIndicator = new Mesh(
-                    //     new SphereGeometry(0.04),
-                    //     new MeshStandardMaterial({color: 0xff0000}),
-                    // );
-                    // snapIndicator.name = 'measurement_line';
                     secondSnapIndicator.name = 'measurement_entity';
                     line.name = 'measurement_entity';
                     group.add(secondSnapIndicator);
@@ -58015,15 +57974,14 @@ class Renderer extends EventDispatcher {
                     // newMidPoint.project(scene.getCamera());
                     scene.isDirty = true;
                     return {
-                        remove3dEntity: () => scene.remove(group),
+                        hit: true, remove3dEntity: () => scene.remove(group),
                         length: secondPoint.clone().sub(firstPoint).length(),
                         selectMeasurement: () => {
                             group.children.forEach(mesh => {
                                 mesh.highlight();
                             });
                             scene.isDirty = true;
-                        },
-                        deselectMeasurement: () => {
+                        }, deselectMeasurement: () => {
                             group.children.forEach(mesh => {
                                 mesh.unhighlight();
                             });
@@ -58031,13 +57989,9 @@ class Renderer extends EventDispatcher {
                         }
                     };
                 }
-                else {
-                    return endDistanceMeasurement;
-                }
             };
             return {
-                endDistanceMeasurement,
-                cleanup: () => scene.remove(group),
+                hit: true, endDistanceMeasurement, cleanup: () => scene.remove(group),
             };
         }
         return null;
@@ -58051,18 +58005,26 @@ class Renderer extends EventDispatcher {
         const scene = this.scenes.values().next().value;
         // update the picking ray with the camera and mouse position
         raycaster$1.setFromCamera(mouse, scene.getCamera());
+        const sceneChildren = [];
+        scene.traverse(child => {
+            if (child.name !== 'measurement_entity' && child.name !== 'wireframe') {
+                if (child.isMesh) {
+                    sceneChildren.push(child);
+                }
+            }
+        });
         // calculate objects intersecting the picking ray
-        const intersects = raycaster$1.intersectObjects(scene.children.filter(child => child.name !== 'measurement_group'), true);
+        const intersects = raycaster$1.intersectObjects(
+        // scene.children.filter(child => child.name !== 'measurement_group'),
+        sceneChildren);
         const firstInt = intersects[0];
         if (typeof firstInt !== 'undefined') {
             const snapIndicator = new Mesh(new SphereGeometry(0.03), new MeshBasicMaterial());
             snapIndicator.material.color.setHex(measurementHexColor);
             snapIndicator.highlight = () => {
-                console.log('highlight', selectedHexColor);
                 snapIndicator.material.color.setHex(selectedHexColor);
             };
             snapIndicator.unhighlight = () => {
-                console.log('unhighlight', measurementHexColor);
                 snapIndicator.material.color.setHex(measurementHexColor);
             };
             // point is in world space
@@ -58070,10 +58032,14 @@ class Renderer extends EventDispatcher {
             // // if we wanted local space then we would use this
             // firstInt.object.worldToLocal(firstInt.point.clone())
             return {
-                point: firstInt.point.clone(), snapIndicator,
+                hit: true,
+                point: firstInt.point.clone(),
+                snapIndicator,
             };
         }
-        return null;
+        return {
+            hit: false,
+        };
     }
     setVertexNormals() {
         const scene = this.scenes.values().next().value;

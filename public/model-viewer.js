@@ -57913,85 +57913,139 @@ class Renderer extends EventDispatcher {
             y: (event.clientY - rect.top) * this.canvasElement.height / rect.height,
         };
     }
-    startDistanceMeasurement(e, measurementHexColor = '0x000000', selectedHexColor = '0xffff00') {
-        const { hit: startHit, point: firstPoint, snapIndicator: firstSnapIndicator, } = this.onDocumentMouseDown(e, measurementHexColor, selectedHexColor);
+    createMeasurePoint(point, measurementHexColor, selectedHexColor) {
+        const measurePoint = new Mesh(new SphereGeometry(0.03), new MeshBasicMaterial());
+        measurePoint.material.color.setHex(measurementHexColor);
+        measurePoint.highlight = () => {
+            measurePoint.material.color.setHex(selectedHexColor);
+        };
+        measurePoint.unhighlight = () => {
+            measurePoint.material.color.setHex(measurementHexColor);
+        };
+        // point is in world space
+        measurePoint.position.copy(point);
+        // // if we wanted local space then we would use this
+        // firstInt.object.worldToLocal(firstInt.point.clone())
+        return measurePoint;
+    }
+    createDistanceMeasurement({ firstPoint: point1, secondPoint: point2, measurementHexColor = '0x000000', selectedHexColor = '0xffff00', }) {
+        const group = new Group();
+        group.name = 'measurement_group';
+        const firstPoint = new Vector3(point1.x, point1.y, point1.z);
+        const secondPoint = new Vector3(point2.x, point2.y, point2.z);
+        const firstMeasurePoint = this.createMeasurePoint(firstPoint, measurementHexColor, selectedHexColor);
+        firstMeasurePoint.name = 'measurement_entity';
+        group.add(firstMeasurePoint);
+        const secondMeasurePoint = this.createMeasurePoint(secondPoint, measurementHexColor, selectedHexColor);
+        secondMeasurePoint.name = 'measurement_entity';
+        group.add(secondMeasurePoint);
+        const positions = [];
+        const geometry = new LineGeometry();
+        positions.push(firstPoint.x, firstPoint.y, firstPoint.z);
+        positions.push(secondPoint.x, secondPoint.y, secondPoint.z);
+        geometry.setPositions(positions);
+        const matLine = new LineMaterial({
+            color: 0xffffff,
+            linewidth: 0.005,
+            vertexColors: true,
+            dashed: false,
+            alphaToCoverage: true,
+        });
+        const setColors = hex => {
+            const colors = [];
+            const color1 = new Color();
+            const color2 = new Color();
+            color1.setHex(hex);
+            color2.setHex(hex);
+            colors.push(color1.r, color1.g, color1.b);
+            colors.push(color2.r, color2.g, color2.b);
+            geometry.setColors(colors);
+            firstMeasurePoint.material.color.setHex(hex);
+            secondMeasurePoint.material.color.setHex(hex);
+            scene.isDirty = true;
+        };
+        const line = new Line2(geometry, matLine);
+        line.computeLineDistances();
+        line.name = 'measurement_entity';
+        line.highlight = () => {
+            setColors(selectedHexColor);
+        };
+        line.unhighlight = () => {
+            setColors(measurementHexColor);
+        };
+        group.add(line);
+        // const outlineMaterial1 = new MeshBasicMaterial( { color: 0xff0000, side:
+        // BackSide } ); const outlineMesh1 = new Mesh( geometry, outlineMaterial1
+        // ); outlineMesh1.position.copy(line.position);
+        // outlineMesh1.scale.multiplyScalar(1.95);
+        const scene = this.scenes.values().next().value;
+        setColors(measurementHexColor);
+        scene.add(group);
+        // scene.add(outlineMesh1);
+        scene.isDirty = true;
+        // // Midpoint: https://stackoverflow.com/a/58580387
+        // let dir = secondPoint.clone().sub(firstPoint);
+        // const length = dir.length();
+        // dir = dir.normalize().multiplyScalar(length * .5);
+        // const midPoint = firstPoint.clone().add(dir);
+        const getScreenPoints = (screenWidth, screenHeight) => {
+            const firstPointNormalizedDevice = firstPoint.clone();
+            const secondPointNormalizedDevice = secondPoint.clone();
+            firstPointNormalizedDevice.project(scene.getCamera());
+            secondPointNormalizedDevice.project(scene.getCamera());
+            return {
+                firstPoint: {
+                    x: (firstPointNormalizedDevice.x + 1) * screenWidth / 2,
+                    y: -(firstPointNormalizedDevice.y - 1) * screenHeight / 2,
+                },
+                secondPoint: {
+                    x: (secondPointNormalizedDevice.x + 1) * screenWidth / 2,
+                    y: -(secondPointNormalizedDevice.y - 1) * screenHeight / 2,
+                },
+            };
+        };
+        return {
+            length: secondPoint.clone().sub(firstPoint).length(),
+            remove3dEntity: () => scene.remove(group), selectMeasurement: () => {
+                group.children.forEach(mesh => {
+                    mesh.highlight();
+                });
+                scene.isDirty = true;
+            }, deselectMeasurement: () => {
+                group.children.forEach(mesh => {
+                    mesh.unhighlight();
+                });
+                scene.isDirty = true;
+            }, updateDefaultColor: updatedHex => {
+                measurementHexColor = updatedHex;
+                setColors(updatedHex);
+            }, getScreenPoints,
+        };
+    }
+    startDistanceMeasurementSkeleton(e, measurementHexColor = '0x000000', selectedHexColor = '0xffff00') {
+        const { hit: startHit, point: firstPoint, } = this.onDocumentMouseDown(e);
         if (startHit) {
             const group = new Group();
             group.name = 'measurement_group';
+            const firstSnapIndicator = this.createMeasurePoint(firstPoint, measurementHexColor, selectedHexColor);
             firstSnapIndicator.name = 'measurement_entity';
             group.add(firstSnapIndicator);
             const scene = this.scenes.values().next().value;
             scene.add(group);
             scene.isDirty = true;
-            const endDistanceMeasurement = _e => {
-                const { hit: endHit, point: secondPoint, snapIndicator: secondSnapIndicator, } = this.onDocumentMouseDown(_e, measurementHexColor, selectedHexColor);
-                if (!endHit)
-                    return { hit: false };
-                if (endHit) {
-                    const positions = [];
-                    const geometry = new LineGeometry();
-                    positions.push(firstPoint.x, firstPoint.y, firstPoint.z);
-                    positions.push(secondPoint.x, secondPoint.y, secondPoint.z);
-                    const setColors = (hex) => {
-                        const colors = [];
-                        const color1 = new Color();
-                        const color2 = new Color();
-                        color1.setHex(hex);
-                        color2.setHex(hex);
-                        colors.push(color1.r, color1.g, color1.b);
-                        colors.push(color2.r, color2.g, color2.b);
-                        geometry.setColors(colors);
-                    };
-                    geometry.setPositions(positions);
-                    setColors(measurementHexColor);
-                    const matLine = new LineMaterial({
-                        color: 0xffffff,
-                        linewidth: 0.005,
-                        vertexColors: true,
-                        dashed: false,
-                    });
-                    const line = new Line2(geometry, matLine);
-                    line.computeLineDistances();
-                    // line.scale.set( 1, 1, 1 );
-                    line.name = 'measurement_line';
-                    line.highlight = () => {
-                        setColors(selectedHexColor);
-                    };
-                    line.unhighlight = () => {
-                        setColors(measurementHexColor);
-                    };
-                    secondSnapIndicator.name = 'measurement_entity';
-                    line.name = 'measurement_entity';
-                    group.add(secondSnapIndicator);
-                    group.add(line);
-                    // // https://stackoverflow.com/a/58580387
-                    // let dir = secondPoint.clone().sub(firstPoint);
-                    // const length = dir.length();
-                    // dir = dir.normalize().multiplyScalar(length * .5);
-                    // const midPoint = firstPoint.clone().add(dir);
-                    // snapIndicator.position.copy(midPoint);
-                    // const newMidPoint = midPoint.clone();
-                    // newMidPoint.project(scene.getCamera());
-                    scene.isDirty = true;
-                    return {
-                        hit: true, remove3dEntity: () => scene.remove(group),
-                        length: secondPoint.clone().sub(firstPoint).length(),
-                        selectMeasurement: () => {
-                            group.children.forEach(mesh => {
-                                mesh.highlight();
-                            });
-                            scene.isDirty = true;
-                        }, deselectMeasurement: () => {
-                            group.children.forEach(mesh => {
-                                mesh.unhighlight();
-                            });
-                            scene.isDirty = true;
-                        }
-                    };
-                }
+            const completeDistanceMeasurementSkeleton = _e => {
+                const { hit: endHit, point: secondPoint, } = this.onDocumentMouseDown(_e);
+                return {
+                    hit: endHit, firstPoint, secondPoint,
+                };
             };
             return {
-                hit: true, endDistanceMeasurement, cleanup: () => scene.remove(group),
+                hit: true,
+                completeDistanceMeasurementSkeleton,
+                removeSkeleton: () => {
+                    scene.remove(group);
+                    scene.isDirty = true;
+                },
             };
         }
         return null;
@@ -58019,22 +58073,9 @@ class Renderer extends EventDispatcher {
         sceneChildren);
         const firstInt = intersects[0];
         if (typeof firstInt !== 'undefined') {
-            const snapIndicator = new Mesh(new SphereGeometry(0.03), new MeshBasicMaterial());
-            snapIndicator.material.color.setHex(measurementHexColor);
-            snapIndicator.highlight = () => {
-                snapIndicator.material.color.setHex(selectedHexColor);
-            };
-            snapIndicator.unhighlight = () => {
-                snapIndicator.material.color.setHex(measurementHexColor);
-            };
-            // point is in world space
-            snapIndicator.position.copy(firstInt.point);
-            // // if we wanted local space then we would use this
-            // firstInt.object.worldToLocal(firstInt.point.clone())
             return {
                 hit: true,
                 point: firstInt.point.clone(),
-                snapIndicator,
             };
         }
         return {
@@ -58152,11 +58193,11 @@ class Renderer extends EventDispatcher {
         }
     }
     getChildren() {
-        var _a, _b, _c, _d, _f;
         const scene = this.scenes.values().next().value;
-        const children = (_f = (_d = (_c = (_b = (_a = scene.children[0]
-            .children[0]
-            .children[0]) === null || _a === void 0 ? void 0 : _a.children[0]) === null || _b === void 0 ? void 0 : _b.children[0]) === null || _c === void 0 ? void 0 : _c.children[0]) === null || _d === void 0 ? void 0 : _d.children[0]) === null || _f === void 0 ? void 0 : _f.children;
+        let children = scene.children;
+        while (children && children.length === 1) {
+            children = children[0].children;
+        }
         return children;
     }
     get canRender() {
@@ -61206,8 +61247,11 @@ const ControlsMixin = (ModelViewerElement) => {
         // toggleWireframeAndModel(): void {
         //   this[$renderer].toggleWireframeAndModel();
         // }
-        startDistanceMeasurement(e, measurementHexColor, selectedHexColor) {
-            return this[$renderer].startDistanceMeasurement(e, measurementHexColor, selectedHexColor);
+        startDistanceMeasurementSkeleton(e, measurementHexColor, selectedHexColor) {
+            return this[$renderer].startDistanceMeasurementSkeleton(e, measurementHexColor, selectedHexColor);
+        }
+        createDistanceMeasurement(params) {
+            return this[$renderer].createDistanceMeasurement(params);
         }
         getChildren() {
             return this[$renderer].getChildren();

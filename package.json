@@ -4,7 +4,7 @@
   "private": true,
   "dependencies": {
     "@pdftron/webviewer": "8.0.0-20210607",
-    "@pdftron/webviewer-3d": "^1.2.0",
+    "@pdftron/webviewer-3d": "^1.3.0",
     "react": "^16.6.0",
     "react-dom": "^16.6.0",
     "react-scripts": "2.1.1"

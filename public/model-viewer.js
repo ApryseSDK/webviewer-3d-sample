@@ -42845,145 +42845,6 @@ class Box2 {
 
 }
 
-const _startP = /*@__PURE__*/ new Vector3();
-const _startEnd = /*@__PURE__*/ new Vector3();
-
-class Line3 {
-
-	constructor( start, end ) {
-
-		this.start = ( start !== undefined ) ? start : new Vector3();
-		this.end = ( end !== undefined ) ? end : new Vector3();
-
-	}
-
-	set( start, end ) {
-
-		this.start.copy( start );
-		this.end.copy( end );
-
-		return this;
-
-	}
-
-	clone() {
-
-		return new this.constructor().copy( this );
-
-	}
-
-	copy( line ) {
-
-		this.start.copy( line.start );
-		this.end.copy( line.end );
-
-		return this;
-
-	}
-
-	getCenter( target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .getCenter() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return target.addVectors( this.start, this.end ).multiplyScalar( 0.5 );
-
-	}
-
-	delta( target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .delta() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return target.subVectors( this.end, this.start );
-
-	}
-
-	distanceSq() {
-
-		return this.start.distanceToSquared( this.end );
-
-	}
-
-	distance() {
-
-		return this.start.distanceTo( this.end );
-
-	}
-
-	at( t, target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .at() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return this.delta( target ).multiplyScalar( t ).add( this.start );
-
-	}
-
-	closestPointToPointParameter( point, clampToLine ) {
-
-		_startP.subVectors( point, this.start );
-		_startEnd.subVectors( this.end, this.start );
-
-		const startEnd2 = _startEnd.dot( _startEnd );
-		const startEnd_startP = _startEnd.dot( _startP );
-
-		let t = startEnd_startP / startEnd2;
-
-		if ( clampToLine ) {
-
-			t = MathUtils.clamp( t, 0, 1 );
-
-		}
-
-		return t;
-
-	}
-
-	closestPointToPoint( point, clampToLine, target ) {
-
-		const t = this.closestPointToPointParameter( point, clampToLine );
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .closestPointToPoint() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return this.delta( target ).multiplyScalar( t ).add( this.start );
-
-	}
-
-	applyMatrix4( matrix ) {
-
-		this.start.applyMatrix4( matrix );
-		this.end.applyMatrix4( matrix );
-
-		return this;
-
-	}
-
-	equals( line ) {
-
-		return line.start.equals( this.start ) && line.end.equals( this.end );
-
-	}
-
-}
-
 function ImmediateRenderObject( material ) {
 
 	Object3D.call( this );
@@ -44321,13 +44182,6 @@ Frustum.prototype.setFromMatrix = function ( m ) {
 
 	console.warn( 'THREE.Frustum: .setFromMatrix() has been renamed to .setFromProjectionMatrix().' );
 	return this.setFromProjectionMatrix( m );
-
-};
-
-Line3.prototype.center = function ( optionalTarget ) {
-
-	console.warn( 'THREE.Line3: .center() has been renamed to .getCenter().' );
-	return this.getCenter( optionalTarget );
 
 };
 
@@ -53772,633 +53626,6 @@ LineSegmentsGeometry.prototype = Object.assign( Object.create( InstancedBufferGe
 
 } );
 
-/**
- * parameters = {
- *  color: <hex>,
- *  linewidth: <float>,
- *  dashed: <boolean>,
- *  dashScale: <float>,
- *  dashSize: <float>,
- *  dashOffset: <float>,
- *  gapSize: <float>,
- *  resolution: <Vector2>, // to be set by renderer
- * }
- */
-
-UniformsLib.line = {
-
-	linewidth: { value: 1 },
-	resolution: { value: new Vector2( 1, 1 ) },
-	dashScale: { value: 1 },
-	dashSize: { value: 1 },
-	dashOffset: { value: 0 },
-	gapSize: { value: 1 }, // todo FIX - maybe change to totalSize
-	opacity: { value: 1 }
-
-};
-
-ShaderLib[ 'line' ] = {
-
-	uniforms: UniformsUtils.merge( [
-		UniformsLib.common,
-		UniformsLib.fog,
-		UniformsLib.line
-	] ),
-
-	vertexShader:
-		`
-		#include <common>
-		#include <color_pars_vertex>
-		#include <fog_pars_vertex>
-		#include <logdepthbuf_pars_vertex>
-		#include <clipping_planes_pars_vertex>
-
-		uniform float linewidth;
-		uniform vec2 resolution;
-
-		attribute vec3 instanceStart;
-		attribute vec3 instanceEnd;
-
-		attribute vec3 instanceColorStart;
-		attribute vec3 instanceColorEnd;
-
-		varying vec2 vUv;
-
-		#ifdef USE_DASH
-
-			uniform float dashScale;
-			attribute float instanceDistanceStart;
-			attribute float instanceDistanceEnd;
-			varying float vLineDistance;
-
-		#endif
-
-		void trimSegment( const in vec4 start, inout vec4 end ) {
-
-			// trim end segment so it terminates between the camera plane and the near plane
-
-			// conservative estimate of the near plane
-			float a = projectionMatrix[ 2 ][ 2 ]; // 3nd entry in 3th column
-			float b = projectionMatrix[ 3 ][ 2 ]; // 3nd entry in 4th column
-			float nearEstimate = - 0.5 * b / a;
-
-			float alpha = ( nearEstimate - start.z ) / ( end.z - start.z );
-
-			end.xyz = mix( start.xyz, end.xyz, alpha );
-
-		}
-
-		void main() {
-
-			#ifdef USE_COLOR
-
-				vColor.xyz = ( position.y < 0.5 ) ? instanceColorStart : instanceColorEnd;
-
-			#endif
-
-			#ifdef USE_DASH
-
-				vLineDistance = ( position.y < 0.5 ) ? dashScale * instanceDistanceStart : dashScale * instanceDistanceEnd;
-
-			#endif
-
-			float aspect = resolution.x / resolution.y;
-
-			vUv = uv;
-
-			// camera space
-			vec4 start = modelViewMatrix * vec4( instanceStart, 1.0 );
-			vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );
-
-			// special case for perspective projection, and segments that terminate either in, or behind, the camera plane
-			// clearly the gpu firmware has a way of addressing this issue when projecting into ndc space
-			// but we need to perform ndc-space calculations in the shader, so we must address this issue directly
-			// perhaps there is a more elegant solution -- WestLangley
-
-			bool perspective = ( projectionMatrix[ 2 ][ 3 ] == - 1.0 ); // 4th entry in the 3rd column
-
-			if ( perspective ) {
-
-				if ( start.z < 0.0 && end.z >= 0.0 ) {
-
-					trimSegment( start, end );
-
-				} else if ( end.z < 0.0 && start.z >= 0.0 ) {
-
-					trimSegment( end, start );
-
-				}
-
-			}
-
-			// clip space
-			vec4 clipStart = projectionMatrix * start;
-			vec4 clipEnd = projectionMatrix * end;
-
-			// ndc space
-			vec2 ndcStart = clipStart.xy / clipStart.w;
-			vec2 ndcEnd = clipEnd.xy / clipEnd.w;
-
-			// direction
-			vec2 dir = ndcEnd - ndcStart;
-
-			// account for clip-space aspect ratio
-			dir.x *= aspect;
-			dir = normalize( dir );
-
-			// perpendicular to dir
-			vec2 offset = vec2( dir.y, - dir.x );
-
-			// undo aspect ratio adjustment
-			dir.x /= aspect;
-			offset.x /= aspect;
-
-			// sign flip
-			if ( position.x < 0.0 ) offset *= - 1.0;
-
-			// endcaps
-			if ( position.y < 0.0 ) {
-
-				offset += - dir;
-
-			} else if ( position.y > 1.0 ) {
-
-				offset += dir;
-
-			}
-
-			// adjust for linewidth
-			offset *= linewidth;
-
-			// adjust for clip-space to screen-space conversion // maybe resolution should be based on viewport ...
-			offset /= resolution.y;
-
-			// select end
-			vec4 clip = ( position.y < 0.5 ) ? clipStart : clipEnd;
-
-			// back to clip space
-			offset *= clip.w;
-
-			clip.xy += offset;
-
-			gl_Position = clip;
-
-			vec4 mvPosition = ( position.y < 0.5 ) ? start : end; // this is an approximation
-
-			#include <logdepthbuf_vertex>
-			#include <clipping_planes_vertex>
-			#include <fog_vertex>
-
-		}
-		`,
-
-	fragmentShader:
-		`
-		uniform vec3 diffuse;
-		uniform float opacity;
-
-		#ifdef USE_DASH
-
-			uniform float dashSize;
-			uniform float dashOffset;
-			uniform float gapSize;
-
-		#endif
-
-		varying float vLineDistance;
-
-		#include <common>
-		#include <color_pars_fragment>
-		#include <fog_pars_fragment>
-		#include <logdepthbuf_pars_fragment>
-		#include <clipping_planes_pars_fragment>
-
-		varying vec2 vUv;
-
-		void main() {
-
-			#include <clipping_planes_fragment>
-
-			#ifdef USE_DASH
-
-				if ( vUv.y < - 1.0 || vUv.y > 1.0 ) discard; // discard endcaps
-
-				if ( mod( vLineDistance + dashOffset, dashSize + gapSize ) > dashSize ) discard; // todo - FIX
-
-			#endif
-
-			if ( abs( vUv.y ) > 1.0 ) {
-
-				float a = vUv.x;
-				float b = ( vUv.y > 0.0 ) ? vUv.y - 1.0 : vUv.y + 1.0;
-				float len2 = a * a + b * b;
-
-				if ( len2 > 1.0 ) discard;
-
-			}
-
-			vec4 diffuseColor = vec4( diffuse, opacity );
-
-			#include <logdepthbuf_fragment>
-			#include <color_fragment>
-
-			gl_FragColor = vec4( diffuseColor.rgb, diffuseColor.a );
-
-			#include <tonemapping_fragment>
-			#include <encodings_fragment>
-			#include <fog_fragment>
-			#include <premultiplied_alpha_fragment>
-
-		}
-		`
-};
-
-var LineMaterial = function ( parameters ) {
-
-	ShaderMaterial.call( this, {
-
-		type: 'LineMaterial',
-
-		uniforms: UniformsUtils.clone( ShaderLib[ 'line' ].uniforms ),
-
-		vertexShader: ShaderLib[ 'line' ].vertexShader,
-		fragmentShader: ShaderLib[ 'line' ].fragmentShader,
-
-		clipping: true // required for clipping support
-
-	} );
-
-	this.dashed = false;
-
-	Object.defineProperties( this, {
-
-		color: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.diffuse.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.diffuse.value = value;
-
-			}
-
-		},
-
-		linewidth: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.linewidth.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.linewidth.value = value;
-
-			}
-
-		},
-
-		dashScale: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.dashScale.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.dashScale.value = value;
-
-			}
-
-		},
-
-		dashSize: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.dashSize.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.dashSize.value = value;
-
-			}
-
-		},
-
-		dashOffset: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.dashOffset.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.dashOffset.value = value;
-
-			}
-
-		},
-
-		gapSize: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.gapSize.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.gapSize.value = value;
-
-			}
-
-		},
-
-		opacity: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.opacity.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.opacity.value = value;
-
-			}
-
-		},
-
-		resolution: {
-
-			enumerable: true,
-
-			get: function () {
-
-				return this.uniforms.resolution.value;
-
-			},
-
-			set: function ( value ) {
-
-				this.uniforms.resolution.value.copy( value );
-
-			}
-
-		}
-
-	} );
-
-	this.setValues( parameters );
-
-};
-
-LineMaterial.prototype = Object.create( ShaderMaterial.prototype );
-LineMaterial.prototype.constructor = LineMaterial;
-
-LineMaterial.prototype.isLineMaterial = true;
-
-var LineSegments2 = function ( geometry, material ) {
-
-	if ( geometry === undefined ) geometry = new LineSegmentsGeometry();
-	if ( material === undefined ) material = new LineMaterial( { color: Math.random() * 0xffffff } );
-
-	Mesh.call( this, geometry, material );
-
-	this.type = 'LineSegments2';
-
-};
-
-LineSegments2.prototype = Object.assign( Object.create( Mesh.prototype ), {
-
-	constructor: LineSegments2,
-
-	isLineSegments2: true,
-
-	computeLineDistances: ( function () { // for backwards-compatability, but could be a method of LineSegmentsGeometry...
-
-		var start = new Vector3();
-		var end = new Vector3();
-
-		return function computeLineDistances() {
-
-			var geometry = this.geometry;
-
-			var instanceStart = geometry.attributes.instanceStart;
-			var instanceEnd = geometry.attributes.instanceEnd;
-			var lineDistances = new Float32Array( 2 * instanceStart.data.count );
-
-			for ( var i = 0, j = 0, l = instanceStart.data.count; i < l; i ++, j += 2 ) {
-
-				start.fromBufferAttribute( instanceStart, i );
-				end.fromBufferAttribute( instanceEnd, i );
-
-				lineDistances[ j ] = ( j === 0 ) ? 0 : lineDistances[ j - 1 ];
-				lineDistances[ j + 1 ] = lineDistances[ j ] + start.distanceTo( end );
-
-			}
-
-			var instanceDistanceBuffer = new InstancedInterleavedBuffer( lineDistances, 2, 1 ); // d0, d1
-
-			geometry.setAttribute( 'instanceDistanceStart', new InterleavedBufferAttribute( instanceDistanceBuffer, 1, 0 ) ); // d0
-			geometry.setAttribute( 'instanceDistanceEnd', new InterleavedBufferAttribute( instanceDistanceBuffer, 1, 1 ) ); // d1
-
-			return this;
-
-		};
-
-	}() ),
-
-	raycast: ( function () {
-
-		var start = new Vector4();
-		var end = new Vector4();
-
-		var ssOrigin = new Vector4();
-		var ssOrigin3 = new Vector3();
-		var mvMatrix = new Matrix4();
-		var line = new Line3();
-		var closestPoint = new Vector3();
-
-		return function raycast( raycaster, intersects ) {
-
-			if ( raycaster.camera === null ) {
-
-				console.error( 'LineSegments2: "Raycaster.camera" needs to be set in order to raycast against LineSegments2.' );
-
-			}
-
-			var threshold = ( raycaster.params.Line2 !== undefined ) ? raycaster.params.Line2.threshold || 0 : 0;
-
-			var ray = raycaster.ray;
-			var camera = raycaster.camera;
-			var projectionMatrix = camera.projectionMatrix;
-
-			var geometry = this.geometry;
-			var material = this.material;
-			var resolution = material.resolution;
-			var lineWidth = material.linewidth + threshold;
-
-			var instanceStart = geometry.attributes.instanceStart;
-			var instanceEnd = geometry.attributes.instanceEnd;
-
-			// camera forward is negative
-			var near = - camera.near;
-
-			// pick a point 1 unit out along the ray to avoid the ray origin
-			// sitting at the camera origin which will cause "w" to be 0 when
-			// applying the projection matrix.
-			ray.at( 1, ssOrigin );
-
-			// ndc space [ - 1.0, 1.0 ]
-			ssOrigin.w = 1;
-			ssOrigin.applyMatrix4( camera.matrixWorldInverse );
-			ssOrigin.applyMatrix4( projectionMatrix );
-			ssOrigin.multiplyScalar( 1 / ssOrigin.w );
-
-			// screen space
-			ssOrigin.x *= resolution.x / 2;
-			ssOrigin.y *= resolution.y / 2;
-			ssOrigin.z = 0;
-
-			ssOrigin3.copy( ssOrigin );
-
-			var matrixWorld = this.matrixWorld;
-			mvMatrix.multiplyMatrices( camera.matrixWorldInverse, matrixWorld );
-
-			for ( var i = 0, l = instanceStart.count; i < l; i ++ ) {
-
-				start.fromBufferAttribute( instanceStart, i );
-				end.fromBufferAttribute( instanceEnd, i );
-
-				start.w = 1;
-				end.w = 1;
-
-				// camera space
-				start.applyMatrix4( mvMatrix );
-				end.applyMatrix4( mvMatrix );
-
-				// skip the segment if it's entirely behind the camera
-				var isBehindCameraNear = start.z > near && end.z > near;
-				if ( isBehindCameraNear ) {
-
-					continue;
-
-				}
-
-				// trim the segment if it extends behind camera near
-				if ( start.z > near ) {
-
-					const deltaDist = start.z - end.z;
-					const t = ( start.z - near ) / deltaDist;
-					start.lerp( end, t );
-
-				} else if ( end.z > near ) {
-
-					const deltaDist = end.z - start.z;
-					const t = ( end.z - near ) / deltaDist;
-					end.lerp( start, t );
-
-				}
-
-				// clip space
-				start.applyMatrix4( projectionMatrix );
-				end.applyMatrix4( projectionMatrix );
-
-				// ndc space [ - 1.0, 1.0 ]
-				start.multiplyScalar( 1 / start.w );
-				end.multiplyScalar( 1 / end.w );
-
-				// screen space
-				start.x *= resolution.x / 2;
-				start.y *= resolution.y / 2;
-
-				end.x *= resolution.x / 2;
-				end.y *= resolution.y / 2;
-
-				// create 2d segment
-				line.start.copy( start );
-				line.start.z = 0;
-
-				line.end.copy( end );
-				line.end.z = 0;
-
-				// get closest point on ray to segment
-				var param = line.closestPointToPointParameter( ssOrigin3, true );
-				line.at( param, closestPoint );
-
-				// check if the intersection point is within clip space
-				var zPos = MathUtils.lerp( start.z, end.z, param );
-				var isInClipSpace = zPos >= - 1 && zPos <= 1;
-
-				var isInside = ssOrigin3.distanceTo( closestPoint ) < lineWidth * 0.5;
-
-				if ( isInClipSpace && isInside ) {
-
-					line.start.fromBufferAttribute( instanceStart, i );
-					line.end.fromBufferAttribute( instanceEnd, i );
-
-					line.start.applyMatrix4( matrixWorld );
-					line.end.applyMatrix4( matrixWorld );
-
-					var pointOnLine = new Vector3();
-					var point = new Vector3();
-
-					ray.distanceSqToSegment( line.start, line.end, point, pointOnLine );
-
-					intersects.push( {
-
-						point: point,
-						pointOnLine: pointOnLine,
-						distance: ray.origin.distanceTo( point ),
-
-						object: this,
-						face: null,
-						faceIndex: i,
-						uv: null,
-						uv2: null,
-
-					} );
-
-				}
-
-			}
-
-		};
-
-	}() )
-
-} );
-
 var LineGeometry = function () {
 
 	LineSegmentsGeometry.call( this );
@@ -54491,25 +53718,6 @@ LineGeometry.prototype = Object.assign( Object.create( LineSegmentsGeometry.prot
 		return this;
 
 	}
-
-} );
-
-var Line2 = function ( geometry, material ) {
-
-	if ( geometry === undefined ) geometry = new LineGeometry();
-	if ( material === undefined ) material = new LineMaterial( { color: Math.random() * 0xffffff } );
-
-	LineSegments2.call( this, geometry, material );
-
-	this.type = 'Line2';
-
-};
-
-Line2.prototype = Object.assign( Object.create( LineSegments2.prototype ), {
-
-	constructor: Line2,
-
-	isLine2: true
 
 } );
 
@@ -57929,60 +57137,58 @@ class Renderer extends EventDispatcher {
         return measurePoint;
     }
     createDistanceMeasurement({ firstPoint: point1, secondPoint: point2, measurementHexColor = '0x000000', selectedHexColor = '0xffff00', }) {
-        const group = new Group();
-        group.name = 'measurement_group';
+        // const group = new Group();
+        // group.name = 'measurement_group';
         const firstPoint = new Vector3(point1.x, point1.y, point1.z);
         const secondPoint = new Vector3(point2.x, point2.y, point2.z);
-        const firstMeasurePoint = this.createMeasurePoint(firstPoint, measurementHexColor, selectedHexColor);
-        firstMeasurePoint.name = 'measurement_entity';
-        group.add(firstMeasurePoint);
-        const secondMeasurePoint = this.createMeasurePoint(secondPoint, measurementHexColor, selectedHexColor);
-        secondMeasurePoint.name = 'measurement_entity';
-        group.add(secondMeasurePoint);
+        // const firstMeasurePoint = this.createMeasurePoint(
+        //     firstPoint, measurementHexColor, selectedHexColor)
+        // firstMeasurePoint.name = 'measurement_entity';
+        // group.add(firstMeasurePoint);
+        // const secondMeasurePoint = this.createMeasurePoint(
+        //     secondPoint, measurementHexColor, selectedHexColor)
+        // secondMeasurePoint.name = 'measurement_entity';
+        // group.add(secondMeasurePoint);
         const positions = [];
         const geometry = new LineGeometry();
         positions.push(firstPoint.x, firstPoint.y, firstPoint.z);
         positions.push(secondPoint.x, secondPoint.y, secondPoint.z);
         geometry.setPositions(positions);
-        const matLine = new LineMaterial({
-            color: 0xffffff,
-            linewidth: 0.005,
-            vertexColors: true,
-            dashed: false,
-            alphaToCoverage: true,
-        });
-        const setColors = hex => {
-            const colors = [];
-            const color1 = new Color();
-            const color2 = new Color();
-            color1.setHex(hex);
-            color2.setHex(hex);
-            colors.push(color1.r, color1.g, color1.b);
-            colors.push(color2.r, color2.g, color2.b);
-            geometry.setColors(colors);
-            firstMeasurePoint.material.color.setHex(hex);
-            secondMeasurePoint.material.color.setHex(hex);
-            scene.isDirty = true;
-        };
-        const line = new Line2(geometry, matLine);
-        line.computeLineDistances();
-        line.name = 'measurement_entity';
-        line.highlight = () => {
-            setColors(selectedHexColor);
-        };
-        line.unhighlight = () => {
-            setColors(measurementHexColor);
-        };
-        group.add(line);
-        // const outlineMaterial1 = new MeshBasicMaterial( { color: 0xff0000, side:
-        // BackSide } ); const outlineMesh1 = new Mesh( geometry, outlineMaterial1
-        // ); outlineMesh1.position.copy(line.position);
-        // outlineMesh1.scale.multiplyScalar(1.95);
+        // const matLine = new LineMaterial({
+        //   color: 0xffffff,   // doesn't do anything lol
+        //   linewidth: 0.005,  // in pixels
+        //   vertexColors: true,
+        //   dashed: false,
+        //   alphaToCoverage: true,
+        // });
+        // const setColors = hex => {
+        //   const colors = [];
+        //   const color1 = new Color();
+        //   const color2 = new Color();
+        //   color1.setHex(hex);
+        //   color2.setHex(hex);
+        //   colors.push(color1.r, color1.g, color1.b);
+        //   colors.push(color2.r, color2.g, color2.b);
+        //   geometry.setColors(colors);
+        //   firstMeasurePoint.material.color.setHex(hex);
+        //   secondMeasurePoint.material.color.setHex(hex);
+        //   scene.isDirty = true;
+        // };
+        // const line = new Line2(geometry, matLine);
+        // line.computeLineDistances();
+        // line.name = 'measurement_entity';
+        // line.highlight = () => {
+        //   setColors(selectedHexColor);
+        // };
+        // line.unhighlight = () => {
+        //   setColors(measurementHexColor);
+        // };
+        // group.add(line);
         const scene = this.scenes.values().next().value;
-        setColors(measurementHexColor);
-        scene.add(group);
-        // scene.add(outlineMesh1);
-        scene.isDirty = true;
+        // setColors(measurementHexColor);
+        // scene.add(group);
+        // // scene.add(outlineMesh1);
+        // scene.isDirty = true;
         // // Midpoint: https://stackoverflow.com/a/58580387
         // let dir = secondPoint.clone().sub(firstPoint);
         // const length = dir.length();
@@ -58005,21 +57211,7 @@ class Renderer extends EventDispatcher {
             };
         };
         return {
-            length: secondPoint.clone().sub(firstPoint).length(),
-            remove3dEntity: () => scene.remove(group), selectMeasurement: () => {
-                group.children.forEach(mesh => {
-                    mesh.highlight();
-                });
-                scene.isDirty = true;
-            }, deselectMeasurement: () => {
-                group.children.forEach(mesh => {
-                    mesh.unhighlight();
-                });
-                scene.isDirty = true;
-            }, updateDefaultColor: updatedHex => {
-                measurementHexColor = updatedHex;
-                setColors(updatedHex);
-            }, getScreenPoints,
+            length: secondPoint.clone().sub(firstPoint).length(), getScreenPoints,
         };
     }
     startDistanceMeasurementSkeleton(e, measurementHexColor = '0x000000', selectedHexColor = '0xffff00') {
@@ -58036,7 +57228,9 @@ class Renderer extends EventDispatcher {
             const completeDistanceMeasurementSkeleton = _e => {
                 const { hit: endHit, point: secondPoint, } = this.onDocumentMouseDown(_e);
                 return {
-                    hit: endHit, firstPoint, secondPoint,
+                    hit: endHit,
+                    firstPoint,
+                    secondPoint,
                 };
             };
             return {
@@ -58194,6 +57388,7 @@ class Renderer extends EventDispatcher {
     }
     getChildren() {
         const scene = this.scenes.values().next().value;
+        console.log('scene', scene);
         let children = scene.children;
         while (children && children.length === 1) {
             children = children[0].children;

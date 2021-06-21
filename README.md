@@ -11,6 +11,10 @@ This sample uses the [3D addon](https://www.npmjs.com/package/@pdftron/webviewer
 
 This repo is specifically designed for any users interested in integrating WebViewer into React project. This project was generated with Create React App. See Create React App documentation for more information.
 
+## Demo
+
+You can explore all of the functionality in our [showcase](https://webviewer-3d.web.app/).
+
 ## Initial setup
 
 Before you begin, make sure your development environment includes [Node.js and npm](https://www.npmjs.com/get-npm).

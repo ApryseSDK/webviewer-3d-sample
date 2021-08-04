@@ -2,5 +2,12 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 import App from './App';
+import { ChakraProvider } from '@chakra-ui/react';
 
-ReactDOM.render(<App />, document.getElementById('root'));
+const component = (
+  <ChakraProvider>
+    <App />
+  </ChakraProvider>
+);
+
+ReactDOM.render(component, document.getElementById('root'));

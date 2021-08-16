@@ -8389,6 +8389,12 @@ Object3D.prototype = Object.assign( Object.create( EventDispatcher.prototype ), 
 
 	updateMatrix: function () {
 
+		if (this.identifier === 'id-hotspot') {
+			console.log('updating hotspot-3', this.matrixWorld.elements);
+		} else if (this.identifier === 'id-mything') {
+			console.log('updating mything-3', this.matrixWorld.elements);
+		}
+
 		this.matrix.compose( this.position, this.quaternion, this.scale );
 
 		this.matrixWorldNeedsUpdate = true;
@@ -8396,6 +8402,12 @@ Object3D.prototype = Object.assign( Object.create( EventDispatcher.prototype ), 
 	},
 
 	updateMatrixWorld: function ( force ) {
+
+		if (this.identifier === 'id-hotspot') {
+			console.log('updating hotspot', this.matrixWorld.elements);
+		} else if (this.identifier === 'id-mything') {
+			console.log('updating mything', this.matrixWorld.elements);
+		}
 
 		if ( this.matrixAutoUpdate ) this.updateMatrix();
 
@@ -8427,9 +8439,18 @@ Object3D.prototype = Object.assign( Object.create( EventDispatcher.prototype ), 
 
 		}
 
+		// if (this.identifier === 'id-hotspot') {
+		// 	console.log('in update', this.matrixWorld.elements);
+		// }
 	},
 
 	updateWorldMatrix: function ( updateParents, updateChildren ) {
+
+		if (this.identifier === 'id-hotspot') {
+			console.log('updating hotspot-2', this.matrixWorld.elements);
+		} else if (this.identifier === 'id-mything') {
+			console.log('updating mything-2', this.matrixWorld.elements);
+		}
 
 		const parent = this.parent;
 
@@ -28517,6 +28538,140 @@ const _v1$5 = new Vector3();
 const _normal$1 = new Vector3();
 const _triangle = new Triangle();
 
+class EdgesGeometry extends BufferGeometry {
+
+	constructor( geometry, thresholdAngle ) {
+
+		super();
+
+		this.type = 'EdgesGeometry';
+
+		this.parameters = {
+			thresholdAngle: thresholdAngle
+		};
+
+		thresholdAngle = ( thresholdAngle !== undefined ) ? thresholdAngle : 1;
+
+		if ( geometry.isGeometry === true ) {
+
+			console.error( 'THREE.EdgesGeometry no longer supports THREE.Geometry. Use THREE.BufferGeometry instead.' );
+			return;
+
+		}
+
+		const precisionPoints = 4;
+		const precision = Math.pow( 10, precisionPoints );
+		const thresholdDot = Math.cos( MathUtils.DEG2RAD * thresholdAngle );
+
+		const indexAttr = geometry.getIndex();
+		const positionAttr = geometry.getAttribute( 'position' );
+		const indexCount = indexAttr ? indexAttr.count : positionAttr.count;
+
+		const indexArr = [ 0, 0, 0 ];
+		const vertKeys = [ 'a', 'b', 'c' ];
+		const hashes = new Array( 3 );
+
+		const edgeData = {};
+		const vertices = [];
+		for ( let i = 0; i < indexCount; i += 3 ) {
+
+			if ( indexAttr ) {
+
+				indexArr[ 0 ] = indexAttr.getX( i );
+				indexArr[ 1 ] = indexAttr.getX( i + 1 );
+				indexArr[ 2 ] = indexAttr.getX( i + 2 );
+
+			} else {
+
+				indexArr[ 0 ] = i;
+				indexArr[ 1 ] = i + 1;
+				indexArr[ 2 ] = i + 2;
+
+			}
+
+			const { a, b, c } = _triangle;
+			a.fromBufferAttribute( positionAttr, indexArr[ 0 ] );
+			b.fromBufferAttribute( positionAttr, indexArr[ 1 ] );
+			c.fromBufferAttribute( positionAttr, indexArr[ 2 ] );
+			_triangle.getNormal( _normal$1 );
+
+			// create hashes for the edge from the vertices
+			hashes[ 0 ] = `${ Math.round( a.x * precision ) },${ Math.round( a.y * precision ) },${ Math.round( a.z * precision ) }`;
+			hashes[ 1 ] = `${ Math.round( b.x * precision ) },${ Math.round( b.y * precision ) },${ Math.round( b.z * precision ) }`;
+			hashes[ 2 ] = `${ Math.round( c.x * precision ) },${ Math.round( c.y * precision ) },${ Math.round( c.z * precision ) }`;
+
+			// skip degenerate triangles
+			if ( hashes[ 0 ] === hashes[ 1 ] || hashes[ 1 ] === hashes[ 2 ] || hashes[ 2 ] === hashes[ 0 ] ) {
+
+				continue;
+
+			}
+
+			// iterate over every edge
+			for ( let j = 0; j < 3; j ++ ) {
+
+				// get the first and next vertex making up the edge
+				const jNext = ( j + 1 ) % 3;
+				const vecHash0 = hashes[ j ];
+				const vecHash1 = hashes[ jNext ];
+				const v0 = _triangle[ vertKeys[ j ] ];
+				const v1 = _triangle[ vertKeys[ jNext ] ];
+
+				const hash = `${ vecHash0 }_${ vecHash1 }`;
+				const reverseHash = `${ vecHash1 }_${ vecHash0 }`;
+
+				if ( reverseHash in edgeData && edgeData[ reverseHash ] ) {
+
+					// if we found a sibling edge add it into the vertex array if
+					// it meets the angle threshold and delete the edge from the map.
+					if ( _normal$1.dot( edgeData[ reverseHash ].normal ) <= thresholdDot ) {
+
+						vertices.push( v0.x, v0.y, v0.z );
+						vertices.push( v1.x, v1.y, v1.z );
+
+					}
+
+					edgeData[ reverseHash ] = null;
+
+				} else if ( ! ( hash in edgeData ) ) {
+
+					// if we've already got an edge here then skip adding a new one
+					edgeData[ hash ] = {
+
+						index0: indexArr[ j ],
+						index1: indexArr[ jNext ],
+						normal: _normal$1.clone(),
+
+					};
+
+				}
+
+			}
+
+		}
+
+		// iterate over all remaining, unmatched edges and add them to the vertex array
+		for ( const key in edgeData ) {
+
+			if ( edgeData[ key ] ) {
+
+				const { index0, index1 } = edgeData[ key ];
+				_v0$2.fromBufferAttribute( positionAttr, index0 );
+				_v1$5.fromBufferAttribute( positionAttr, index1 );
+
+				vertices.push( _v0$2.x, _v0$2.y, _v0$2.z );
+				vertices.push( _v1$5.x, _v1$5.y, _v1$5.z );
+
+			}
+
+		}
+
+		this.setAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+
+	}
+
+}
+
 /**
  * Port from https://github.com/mapbox/earcut (v2.2.2)
  */
@@ -42845,6 +43000,145 @@ class Box2 {
 
 }
 
+const _startP = /*@__PURE__*/ new Vector3();
+const _startEnd = /*@__PURE__*/ new Vector3();
+
+class Line3 {
+
+	constructor( start, end ) {
+
+		this.start = ( start !== undefined ) ? start : new Vector3();
+		this.end = ( end !== undefined ) ? end : new Vector3();
+
+	}
+
+	set( start, end ) {
+
+		this.start.copy( start );
+		this.end.copy( end );
+
+		return this;
+
+	}
+
+	clone() {
+
+		return new this.constructor().copy( this );
+
+	}
+
+	copy( line ) {
+
+		this.start.copy( line.start );
+		this.end.copy( line.end );
+
+		return this;
+
+	}
+
+	getCenter( target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .getCenter() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return target.addVectors( this.start, this.end ).multiplyScalar( 0.5 );
+
+	}
+
+	delta( target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .delta() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return target.subVectors( this.end, this.start );
+
+	}
+
+	distanceSq() {
+
+		return this.start.distanceToSquared( this.end );
+
+	}
+
+	distance() {
+
+		return this.start.distanceTo( this.end );
+
+	}
+
+	at( t, target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .at() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return this.delta( target ).multiplyScalar( t ).add( this.start );
+
+	}
+
+	closestPointToPointParameter( point, clampToLine ) {
+
+		_startP.subVectors( point, this.start );
+		_startEnd.subVectors( this.end, this.start );
+
+		const startEnd2 = _startEnd.dot( _startEnd );
+		const startEnd_startP = _startEnd.dot( _startP );
+
+		let t = startEnd_startP / startEnd2;
+
+		if ( clampToLine ) {
+
+			t = MathUtils.clamp( t, 0, 1 );
+
+		}
+
+		return t;
+
+	}
+
+	closestPointToPoint( point, clampToLine, target ) {
+
+		const t = this.closestPointToPointParameter( point, clampToLine );
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .closestPointToPoint() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return this.delta( target ).multiplyScalar( t ).add( this.start );
+
+	}
+
+	applyMatrix4( matrix ) {
+
+		this.start.applyMatrix4( matrix );
+		this.end.applyMatrix4( matrix );
+
+		return this;
+
+	}
+
+	equals( line ) {
+
+		return line.start.equals( this.start ) && line.end.equals( this.end );
+
+	}
+
+}
+
 function ImmediateRenderObject( material ) {
 
 	Object3D.call( this );
@@ -44182,6 +44476,13 @@ Frustum.prototype.setFromMatrix = function ( m ) {
 
 	console.warn( 'THREE.Frustum: .setFromMatrix() has been renamed to .setFromProjectionMatrix().' );
 	return this.setFromProjectionMatrix( m );
+
+};
+
+Line3.prototype.center = function ( optionalTarget ) {
+
+	console.warn( 'THREE.Line3: .center() has been renamed to .getCenter().' );
+	return this.getCenter( optionalTarget );
 
 };
 
@@ -51908,10 +52209,13 @@ var CSS2DRenderer = function () {
 
 			object.onBeforeRender( _this, scene, camera );
 
+			// console.log('matrixworld', object.matrixWorld.elements, object);
 			vector.setFromMatrixPosition( object.matrixWorld );
+			// console.log('css2', object.position, object.matrixWorld.elements);
 			vector.applyMatrix4( viewProjectionMatrix );
 
 			var element = object.element;
+			// console.log(vector.x, vector.y);
 			var style = 'translate(-50%,-50%) translate(' + ( vector.x * _widthHalf + _widthHalf ) + 'px,' + ( - vector.y * _heightHalf + _heightHalf ) + 'px)';
 
 			element.style.WebkitTransform = style;
@@ -52796,6 +53100,7 @@ class ModelScene extends Scene {
         // model is loaded and framing is computed.
         this.camera = new PerspectiveCamera(45, 1, 0.1, 100);
         this.camera.name = 'MainCamera';
+        this.camera.layers.enable(1);
         this.activeCamera = this.camera;
         this.add(this.target);
         this.setSize(width, height);
@@ -53029,6 +53334,7 @@ class ModelScene extends Scene {
             this.target.updateMatrixWorld();
             this.setShadowRotation(this.yaw);
             this.isDirty = true;
+            window.dispatchEvent(new CustomEvent('update-target', { detail: { x, y, z } }));
         }
     }
     /**
@@ -53376,350 +53682,6 @@ VertexNormalsHelper.prototype.update = function () {
 	position.needsUpdate = true;
 
 };
-
-var LineSegmentsGeometry = function () {
-
-	InstancedBufferGeometry.call( this );
-
-	this.type = 'LineSegmentsGeometry';
-
-	var positions = [ - 1, 2, 0, 1, 2, 0, - 1, 1, 0, 1, 1, 0, - 1, 0, 0, 1, 0, 0, - 1, - 1, 0, 1, - 1, 0 ];
-	var uvs = [ - 1, 2, 1, 2, - 1, 1, 1, 1, - 1, - 1, 1, - 1, - 1, - 2, 1, - 2 ];
-	var index = [ 0, 2, 1, 2, 3, 1, 2, 4, 3, 4, 5, 3, 4, 6, 5, 6, 7, 5 ];
-
-	this.setIndex( index );
-	this.setAttribute( 'position', new Float32BufferAttribute( positions, 3 ) );
-	this.setAttribute( 'uv', new Float32BufferAttribute( uvs, 2 ) );
-
-};
-
-LineSegmentsGeometry.prototype = Object.assign( Object.create( InstancedBufferGeometry.prototype ), {
-
-	constructor: LineSegmentsGeometry,
-
-	isLineSegmentsGeometry: true,
-
-	applyMatrix4: function ( matrix ) {
-
-		var start = this.attributes.instanceStart;
-		var end = this.attributes.instanceEnd;
-
-		if ( start !== undefined ) {
-
-			start.applyMatrix4( matrix );
-
-			end.applyMatrix4( matrix );
-
-			start.needsUpdate = true;
-
-		}
-
-		if ( this.boundingBox !== null ) {
-
-			this.computeBoundingBox();
-
-		}
-
-		if ( this.boundingSphere !== null ) {
-
-			this.computeBoundingSphere();
-
-		}
-
-		return this;
-
-	},
-
-	setPositions: function ( array ) {
-
-		var lineSegments;
-
-		if ( array instanceof Float32Array ) {
-
-			lineSegments = array;
-
-		} else if ( Array.isArray( array ) ) {
-
-			lineSegments = new Float32Array( array );
-
-		}
-
-		var instanceBuffer = new InstancedInterleavedBuffer( lineSegments, 6, 1 ); // xyz, xyz
-
-		this.setAttribute( 'instanceStart', new InterleavedBufferAttribute( instanceBuffer, 3, 0 ) ); // xyz
-		this.setAttribute( 'instanceEnd', new InterleavedBufferAttribute( instanceBuffer, 3, 3 ) ); // xyz
-
-		//
-
-		this.computeBoundingBox();
-		this.computeBoundingSphere();
-
-		return this;
-
-	},
-
-	setColors: function ( array ) {
-
-		var colors;
-
-		if ( array instanceof Float32Array ) {
-
-			colors = array;
-
-		} else if ( Array.isArray( array ) ) {
-
-			colors = new Float32Array( array );
-
-		}
-
-		var instanceColorBuffer = new InstancedInterleavedBuffer( colors, 6, 1 ); // rgb, rgb
-
-		this.setAttribute( 'instanceColorStart', new InterleavedBufferAttribute( instanceColorBuffer, 3, 0 ) ); // rgb
-		this.setAttribute( 'instanceColorEnd', new InterleavedBufferAttribute( instanceColorBuffer, 3, 3 ) ); // rgb
-
-		return this;
-
-	},
-
-	fromWireframeGeometry: function ( geometry ) {
-
-		this.setPositions( geometry.attributes.position.array );
-
-		return this;
-
-	},
-
-	fromEdgesGeometry: function ( geometry ) {
-
-		this.setPositions( geometry.attributes.position.array );
-
-		return this;
-
-	},
-
-	fromMesh: function ( mesh ) {
-
-		this.fromWireframeGeometry( new WireframeGeometry( mesh.geometry ) );
-
-		// set colors, maybe
-
-		return this;
-
-	},
-
-	fromLineSegments: function ( lineSegments ) {
-
-		var geometry = lineSegments.geometry;
-
-		if ( geometry.isGeometry ) {
-
-			console.error( 'THREE.LineSegmentsGeometry no longer supports Geometry. Use THREE.BufferGeometry instead.' );
-			return;
-
-		} else if ( geometry.isBufferGeometry ) {
-
-			this.setPositions( geometry.attributes.position.array ); // assumes non-indexed
-
-		}
-
-		// set colors, maybe
-
-		return this;
-
-	},
-
-	computeBoundingBox: function () {
-
-		var box = new Box3();
-
-		return function computeBoundingBox() {
-
-			if ( this.boundingBox === null ) {
-
-				this.boundingBox = new Box3();
-
-			}
-
-			var start = this.attributes.instanceStart;
-			var end = this.attributes.instanceEnd;
-
-			if ( start !== undefined && end !== undefined ) {
-
-				this.boundingBox.setFromBufferAttribute( start );
-
-				box.setFromBufferAttribute( end );
-
-				this.boundingBox.union( box );
-
-			}
-
-		};
-
-	}(),
-
-	computeBoundingSphere: function () {
-
-		var vector = new Vector3();
-
-		return function computeBoundingSphere() {
-
-			if ( this.boundingSphere === null ) {
-
-				this.boundingSphere = new Sphere();
-
-			}
-
-			if ( this.boundingBox === null ) {
-
-				this.computeBoundingBox();
-
-			}
-
-			var start = this.attributes.instanceStart;
-			var end = this.attributes.instanceEnd;
-
-			if ( start !== undefined && end !== undefined ) {
-
-				var center = this.boundingSphere.center;
-
-				this.boundingBox.getCenter( center );
-
-				var maxRadiusSq = 0;
-
-				for ( var i = 0, il = start.count; i < il; i ++ ) {
-
-					vector.fromBufferAttribute( start, i );
-					maxRadiusSq = Math.max( maxRadiusSq, center.distanceToSquared( vector ) );
-
-					vector.fromBufferAttribute( end, i );
-					maxRadiusSq = Math.max( maxRadiusSq, center.distanceToSquared( vector ) );
-
-				}
-
-				this.boundingSphere.radius = Math.sqrt( maxRadiusSq );
-
-				if ( isNaN( this.boundingSphere.radius ) ) {
-
-					console.error( 'THREE.LineSegmentsGeometry.computeBoundingSphere(): Computed radius is NaN. The instanced position data is likely to have NaN values.', this );
-
-				}
-
-			}
-
-		};
-
-	}(),
-
-	toJSON: function () {
-
-		// todo
-
-	},
-
-	applyMatrix: function ( matrix ) {
-
-		console.warn( 'THREE.LineSegmentsGeometry: applyMatrix() has been renamed to applyMatrix4().' );
-
-		return this.applyMatrix4( matrix );
-
-	}
-
-} );
-
-var LineGeometry = function () {
-
-	LineSegmentsGeometry.call( this );
-
-	this.type = 'LineGeometry';
-
-};
-
-LineGeometry.prototype = Object.assign( Object.create( LineSegmentsGeometry.prototype ), {
-
-	constructor: LineGeometry,
-
-	isLineGeometry: true,
-
-	setPositions: function ( array ) {
-
-		// converts [ x1, y1, z1,  x2, y2, z2, ... ] to pairs format
-
-		var length = array.length - 3;
-		var points = new Float32Array( 2 * length );
-
-		for ( var i = 0; i < length; i += 3 ) {
-
-			points[ 2 * i ] = array[ i ];
-			points[ 2 * i + 1 ] = array[ i + 1 ];
-			points[ 2 * i + 2 ] = array[ i + 2 ];
-
-			points[ 2 * i + 3 ] = array[ i + 3 ];
-			points[ 2 * i + 4 ] = array[ i + 4 ];
-			points[ 2 * i + 5 ] = array[ i + 5 ];
-
-		}
-
-		LineSegmentsGeometry.prototype.setPositions.call( this, points );
-
-		return this;
-
-	},
-
-	setColors: function ( array ) {
-
-		// converts [ r1, g1, b1,  r2, g2, b2, ... ] to pairs format
-
-		var length = array.length - 3;
-		var colors = new Float32Array( 2 * length );
-
-		for ( var i = 0; i < length; i += 3 ) {
-
-			colors[ 2 * i ] = array[ i ];
-			colors[ 2 * i + 1 ] = array[ i + 1 ];
-			colors[ 2 * i + 2 ] = array[ i + 2 ];
-
-			colors[ 2 * i + 3 ] = array[ i + 3 ];
-			colors[ 2 * i + 4 ] = array[ i + 4 ];
-			colors[ 2 * i + 5 ] = array[ i + 5 ];
-
-		}
-
-		LineSegmentsGeometry.prototype.setColors.call( this, colors );
-
-		return this;
-
-	},
-
-	fromLine: function ( line ) {
-
-		var geometry = line.geometry;
-
-		if ( geometry.isGeometry ) {
-
-			console.error( 'THREE.LineGeometry no longer supports Geometry. Use THREE.BufferGeometry instead.' );
-			return;
-
-		} else if ( geometry.isBufferGeometry ) {
-
-			this.setPositions( geometry.attributes.position.array ); // assumes non-indexed
-
-		}
-
-		// set colors, maybe
-
-		return this;
-
-	},
-
-	copy: function ( /* source */ ) {
-
-		// todo
-
-		return this;
-
-	}
-
-} );
 
 /**
  * This class generates custom mipmaps for a roughness map by encoding the lost variation in the
@@ -57015,20 +56977,7 @@ class TextureUtils extends EventDispatcher {
     }
 }
 
-/* @license
- * Copyright 2019 Google LLC. All Rights Reserved.
- * Licensed under the Apache License, Version 2.0 (the 'License');
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an 'AS IS' BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* eslint-disable */
 // Between 0 and 1: larger means the average responds faster and is less smooth.
 const DURATION_DECAY = 0.2;
 const LOW_FRAME_DURATION_MS = 18;
@@ -57056,6 +57005,8 @@ class Renderer extends EventDispatcher {
         this.height = 0;
         this.dpr = 1;
         this.foo = [];
+        this.bvhs = [];
+        this.edgeLines = [];
         this.isWireframe = false;
         this.isWireframeAndModel = false;
         this.debugger = null;
@@ -57114,166 +57065,280 @@ class Renderer extends EventDispatcher {
         this._singleton.dispose();
         this._singleton = new Renderer({ debug: isDebugMode() });
     }
-    getCanvasRelativePosition(event) {
-        const rect = this.canvasElement.getBoundingClientRect();
+    getCanvasRelativePosition(event, canvas) {
+        const rect = canvas.getBoundingClientRect();
         return {
-            x: (event.clientX - rect.left) * this.canvasElement.width / rect.width,
-            y: (event.clientY - rect.top) * this.canvasElement.height / rect.height,
+            x: (event.clientX - rect.left) * canvas.width / rect.width,
+            y: (event.clientY - rect.top) * canvas.height / rect.height,
         };
     }
-    createMeasurePoint(point, measurementHexColor, selectedHexColor) {
+    createMeasurePoint(point, measurementHexColor) {
         const measurePoint = new Mesh(new SphereGeometry(0.03), new MeshBasicMaterial());
         measurePoint.material.color.setHex(measurementHexColor);
-        measurePoint.highlight = () => {
-            measurePoint.material.color.setHex(selectedHexColor);
-        };
-        measurePoint.unhighlight = () => {
-            measurePoint.material.color.setHex(measurementHexColor);
-        };
         // point is in world space
         measurePoint.position.copy(point);
         // // if we wanted local space then we would use this
         // firstInt.object.worldToLocal(firstInt.point.clone())
         return measurePoint;
     }
-    createDistanceMeasurement({ firstPoint: point1, secondPoint: point2, measurementHexColor = '0x000000', selectedHexColor = '0xffff00', }) {
-        // const group = new Group();
-        // group.name = 'measurement_group';
+    createDistanceMeasurement({ firstPoint: point1, secondPoint: point2, }) {
         const firstPoint = new Vector3(point1.x, point1.y, point1.z);
         const secondPoint = new Vector3(point2.x, point2.y, point2.z);
-        // const firstMeasurePoint = this.createMeasurePoint(
-        //     firstPoint, measurementHexColor, selectedHexColor)
-        // firstMeasurePoint.name = 'measurement_entity';
-        // group.add(firstMeasurePoint);
-        // const secondMeasurePoint = this.createMeasurePoint(
-        //     secondPoint, measurementHexColor, selectedHexColor)
-        // secondMeasurePoint.name = 'measurement_entity';
-        // group.add(secondMeasurePoint);
-        const positions = [];
-        const geometry = new LineGeometry();
-        positions.push(firstPoint.x, firstPoint.y, firstPoint.z);
-        positions.push(secondPoint.x, secondPoint.y, secondPoint.z);
-        geometry.setPositions(positions);
-        // const matLine = new LineMaterial({
-        //   color: 0xffffff,   // doesn't do anything lol
-        //   linewidth: 0.005,  // in pixels
-        //   vertexColors: true,
-        //   dashed: false,
-        //   alphaToCoverage: true,
-        // });
-        // const setColors = hex => {
-        //   const colors = [];
-        //   const color1 = new Color();
-        //   const color2 = new Color();
-        //   color1.setHex(hex);
-        //   color2.setHex(hex);
-        //   colors.push(color1.r, color1.g, color1.b);
-        //   colors.push(color2.r, color2.g, color2.b);
-        //   geometry.setColors(colors);
-        //   firstMeasurePoint.material.color.setHex(hex);
-        //   secondMeasurePoint.material.color.setHex(hex);
-        //   scene.isDirty = true;
-        // };
-        // const line = new Line2(geometry, matLine);
-        // line.computeLineDistances();
-        // line.name = 'measurement_entity';
-        // line.highlight = () => {
-        //   setColors(selectedHexColor);
-        // };
-        // line.unhighlight = () => {
-        //   setColors(measurementHexColor);
-        // };
-        // group.add(line);
         const scene = this.scenes.values().next().value;
-        // setColors(measurementHexColor);
-        // scene.add(group);
-        // // scene.add(outlineMesh1);
-        // scene.isDirty = true;
+        const target = scene.target;
+        const obj1 = new Object3D();
+        const obj2 = new Object3D();
+        // const obj1 = new Mesh(
+        //     new SphereGeometry(0.03),
+        //     new MeshBasicMaterial(),
+        // );
+        // obj1.material.color.setHex('0x000000');
+        // const obj2 = new Mesh(
+        //     new SphereGeometry(0.03),
+        //     new MeshBasicMaterial(),
+        // );
+        // obj2.material.color.setHex('0x000000');
+        // obj2.identifier = 'id-mything';
+        // obj2.position.set(point2.x, point2.y, point2.z);
+        // target.add(obj1);
+        // This works for the point above
+        // scene.add(obj1);
+        target.add(obj1);
+        obj1.updateMatrixWorld();
+        // const newPoint1 = firstPoint.clone();
+        obj1.worldToLocal(firstPoint);
+        obj1.position.copy(firstPoint);
+        target.add(obj2);
+        obj2.updateMatrixWorld();
+        // const newPoint2 = secondPoint.clone();
+        obj2.worldToLocal(secondPoint);
+        obj2.position.copy(secondPoint);
+        scene.isDirty = true;
         // // Midpoint: https://stackoverflow.com/a/58580387
         // let dir = secondPoint.clone().sub(firstPoint);
         // const length = dir.length();
         // dir = dir.normalize().multiplyScalar(length * .5);
         // const midPoint = firstPoint.clone().add(dir);
         const getScreenPoints = (screenWidth, screenHeight) => {
-            const firstPointNormalizedDevice = firstPoint.clone();
-            const secondPointNormalizedDevice = secondPoint.clone();
-            firstPointNormalizedDevice.project(scene.getCamera());
-            secondPointNormalizedDevice.project(scene.getCamera());
+            const camera = scene.getCamera();
+            if (scene.autoUpdate === true)
+                scene.updateMatrixWorld();
+            if (camera.parent === null)
+                camera.updateMatrixWorld();
+            const firstVector = new Vector3();
+            firstVector.setFromMatrixPosition(obj1.matrixWorld);
+            const secondVector = new Vector3();
+            secondVector.setFromMatrixPosition(obj2.matrixWorld);
+            const firstPoint = this.getScreenPoint(firstVector, screenWidth, screenHeight);
+            const secondPoint = this.getScreenPoint(secondVector, screenWidth, screenHeight);
             return {
-                firstPoint: {
-                    x: (firstPointNormalizedDevice.x + 1) * screenWidth / 2,
-                    y: -(firstPointNormalizedDevice.y - 1) * screenHeight / 2,
-                },
-                secondPoint: {
-                    x: (secondPointNormalizedDevice.x + 1) * screenWidth / 2,
-                    y: -(secondPointNormalizedDevice.y - 1) * screenHeight / 2,
-                },
+                firstPoint, secondPoint,
             };
         };
         return {
-            length: secondPoint.clone().sub(firstPoint).length(), getScreenPoints,
+            onRemoval: () => {
+                target.remove(obj1);
+                target.remove(obj2);
+                scene.isDirty = true;
+            }, getScreenPoints, length: secondPoint.clone().sub(firstPoint).length(),
         };
     }
-    startDistanceMeasurementSkeleton(e, measurementHexColor = '0x000000', selectedHexColor = '0xffff00') {
-        const { hit: startHit, point: firstPoint, } = this.onDocumentMouseDown(e);
-        if (startHit) {
-            const group = new Group();
-            group.name = 'measurement_group';
-            const firstSnapIndicator = this.createMeasurePoint(firstPoint, measurementHexColor, selectedHexColor);
-            firstSnapIndicator.name = 'measurement_entity';
-            group.add(firstSnapIndicator);
-            const scene = this.scenes.values().next().value;
-            scene.add(group);
-            scene.isDirty = true;
-            const completeDistanceMeasurementSkeleton = _e => {
-                const { hit: endHit, point: secondPoint, } = this.onDocumentMouseDown(_e);
-                return {
-                    hit: endHit,
-                    firstPoint,
-                    secondPoint,
-                };
-            };
-            return {
-                hit: true,
-                completeDistanceMeasurementSkeleton,
-                removeSkeleton: () => {
-                    scene.remove(group);
-                    scene.isDirty = true;
-                },
-            };
-        }
-        return null;
-    }
-    onDocumentMouseDown(event, measurementHexColor, selectedHexColor) {
-        const pos = this.getCanvasRelativePosition(event);
+    getWorldPoint(screenPoint, zPlane, canvas) {
+        const scene = this.scenes.values().next().value;
+        const camera = scene.getCamera();
+        // const pos = this.getCanvasRelativePosition({
+        //   clientX: screenPoint.x,
+        //   clientY: screenPoint.y,
+        // }, canvas);
         const mouse = {
-            x: (pos.x / this.canvasElement.width) * 2 - 1,
-            y: -(pos.y / this.canvasElement.height) * 2 + 1,
+            x: (screenPoint.x / canvas.width) * 2 - 1,
+            y: -(screenPoint.y / canvas.height) * 2 + 1,
+        };
+        const vector = new Vector3(mouse.x, mouse.y, zPlane).unproject(camera);
+        return vector;
+    }
+    getScreenPoint(point, screenWidth, screenHeight) {
+        const scene = this.scenes.values().next().value;
+        const camera = scene.getCamera();
+        const clonedVector = new Vector3;
+        clonedVector.copy(point);
+        // Taken from:
+        // https://discourse.threejs.org/t/how-to-converting-world-coordinates-to-2d-mouse-coordinates-in-threejs/2251
+        clonedVector.project(camera);
+        return {
+            x: (clonedVector.x + 1) * screenWidth / 2,
+            y: -(clonedVector.y - 1) * screenHeight / 2,
+            zPlane: clonedVector.z,
+        };
+    }
+    // We have to pass in canvas because the model viewer canvas
+    // changes width and height randomly
+    getMeasurePoint(e, canvas, { snapToEdge, }) {
+        const pos = this.getCanvasRelativePosition(e, canvas);
+        const mouse = {
+            x: (pos.x / canvas.width) * 2 - 1,
+            y: -(pos.y / canvas.height) * 2 + 1,
         };
         const scene = this.scenes.values().next().value;
         // update the picking ray with the camera and mouse position
         raycaster$1.setFromCamera(mouse, scene.getCamera());
-        const sceneChildren = [];
+        const sceneMeshes = [];
+        scene.traverse(child => {
+            // if (child.name !== 'measurement_entity' && child.name !==
+            // 'wireframe') {
+            if (child.isMesh) {
+                sceneMeshes.push(child);
+            }
+            // }
+        });
+        // calculate objects intersecting the picking ray
+        const intersects = raycaster$1.intersectObjects(sceneMeshes);
+        const firstInt = intersects[0];
+        if (typeof firstInt !== 'undefined') {
+            const vector = this.getClosestVectorToIntersection(firstInt, snapToEdge, canvas);
+            return vector;
+        }
+        return null;
+    }
+    getClosestVectorToIntersection(intersection, snapToEdge, canvas) {
+        if (snapToEdge) {
+            let closestVector = new Vector3();
+            let smallestDistance = Infinity;
+            const line = new Line3();
+            const closestPointPerLine = new Vector3();
+            const intLocalPoint = intersection.point.clone();
+            intersection.object.worldToLocal(intLocalPoint);
+            this.edgeLines.forEach(edgeLine => {
+                const { position } = edgeLine.geometry.attributes;
+                for (let i = 0; i < position.count - 1; i += 2) {
+                    line.start.fromBufferAttribute(position, i);
+                    line.end.fromBufferAttribute(position, i + 1);
+                    // clamp to true because if not then point is wrong
+                    line.closestPointToPoint(intLocalPoint, true, closestPointPerLine);
+                    intersection.object.localToWorld(closestPointPerLine);
+                    const distance = closestPointPerLine.distanceTo(intersection.point);
+                    if (distance < smallestDistance) {
+                        smallestDistance = distance;
+                        // clone because closestPointPerLine will get modified
+                        closestVector = closestPointPerLine.clone();
+                    }
+                }
+            });
+            const { width, height } = canvas.getBoundingClientRect();
+            const closestScreenPoint = this.getScreenPoint(closestVector, width, height);
+            const intScreenPoint = this.getScreenPoint(intersection.point, width, height);
+            const dx = closestScreenPoint.x - intScreenPoint.x;
+            const dy = closestScreenPoint.y - intScreenPoint.y;
+            const distanceBetweenScreenPoints = Math.sqrt((dx * dx) + (dy * dy));
+            if (distanceBetweenScreenPoints > 11) {
+                return intersection.point;
+            }
+            return closestVector;
+        }
+        return intersection.point;
+        // const faceData =
+        //   [intersection.face.a, intersection.face.b, intersection.face.c];
+        // const {position} = intersection.object.geometry.attributes;
+        // const vertices = faceData.map(vId => {
+        //   const vector = new Vector3();
+        //   vector.fromBufferAttribute(position, vId);
+        //   vector.distance = intersection.object.localToWorld(vector.clone())
+        //                         .distanceTo(intersection.point);
+        //   return vector;
+        // });
+        // vertices.sort(function(a, b) {
+        //   return a.distance - b.distance;
+        // });
+        // const worldPoint = intersection.object.localToWorld(vertices[0]);
+        // return worldPoint;
+    }
+    onDocumentMouseDown(event, canvas, { snapToEdge = false } = {}) {
+        const pos = this.getCanvasRelativePosition(event, canvas);
+        const mouse = {
+            x: (pos.x / canvas.width) * 2 - 1,
+            y: -(pos.y / canvas.height) * 2 + 1,
+        };
+        const scene = this.scenes.values().next().value;
+        // update the picking ray with the camera and mouse position
+        raycaster$1.setFromCamera(mouse, scene.getCamera());
         scene.traverse(child => {
             if (child.name !== 'measurement_entity' && child.name !== 'wireframe') {
-                if (child.isMesh) {
-                    sceneChildren.push(child);
-                }
+                if (child.isMesh) ;
             }
         });
         // calculate objects intersecting the picking ray
         const intersects = raycaster$1.intersectObjects(
         // scene.children.filter(child => child.name !== 'measurement_group'),
-        sceneChildren);
+        scene.children);
         const firstInt = intersects[0];
         if (typeof firstInt !== 'undefined') {
             return {
                 hit: true,
-                point: firstInt.point.clone(),
+                intersection: firstInt,
             };
         }
         return {
             hit: false,
+        };
+    }
+    setEdges() {
+        this.edgeLines.forEach(edgeLine => {
+            edgeLine.visible = true;
+        });
+        return () => {
+            this.edgeLines.forEach(edgeLine => {
+                edgeLine.visible = false;
+            });
+        };
+    }
+    setInvisibleEdges() {
+        const scene = this.scenes.values().next().value;
+        const funcs = [];
+        scene.traverse(child => {
+            if (child.isMesh) {
+                // console.log(child.name);
+                // if (child.name === 'm_Barrel' || child.name ===
+                // 'm_Barrel_Material_#30_0') { if (child.name === 'm_WoodenBeams' ||
+                // child.name === 'm_WoodenBeams_Material_#25_0') {
+                // if (child.name === 'pCube43' || child.name ===
+                // 'pCube43_Air_condi_0') {
+                // 1`}
+                // only show edges with 15 degrees or more angle between faces
+                const thresholdAngle = 15;
+                const edgeGeometry = new EdgesGeometry(child.geometry, thresholdAngle);
+                const line = new LineSegments(edgeGeometry, new LineBasicMaterial({ color: 0xff0000 }));
+                line.name = 'wv_entity';
+                line.visible = false;
+                // This puts edges on another layer. So that when testing ray intersections
+                // we won't accidently intersects with edges.
+                line.layers.set(1);
+                this.edgeLines.push(line);
+                child.add(line);
+                funcs.push(() => child.remove(line));
+                // this.bvhs.push({ bvh: new MeshBVH(line.geometry), mesh: line });
+                // } else {
+                //   child.visible = false;
+                // }
+                // if (child.name !== 'm_Barrel' && child.name !==
+                // 'm_Barrel_Material_#30_0' && child.isMesh) {
+                //   child.visible = false;
+                // }
+                // // if ((child.name === 'm_Barrel' || child.name ===
+                // 'm_Barrel_Material_#30_0')) {
+                //     // only show edges with 15 degrees or more angle between faces
+                //     const thresholdAngle = 15;
+                //     const edgeGeometry = new EdgesGeometry(child.geometry,
+                //     thresholdAngle); const line = new LineSegments(
+                //         edgeGeometry, new LineBasicMaterial({color: 0xffffff}));
+                //     line.name = 'edge_entity';
+                //     line.visible = false;
+                //     this.edgeLines.push(line);
+                //     child.add(line);
+                // }
+            }
+        });
+        return () => {
+            funcs.forEach(func => func());
         };
     }
     setVertexNormals() {
@@ -57388,7 +57453,6 @@ class Renderer extends EventDispatcher {
     }
     getChildren() {
         const scene = this.scenes.values().next().value;
-        console.log('scene', scene);
         let children = scene.children;
         while (children && children.length === 1) {
             children = children[0].children;
@@ -57489,19 +57553,26 @@ class Renderer extends EventDispatcher {
         }
     }
     registerScene(scene) {
-        // const sphere = new Mesh(
+        // const obj = new Object3D();
+        // obj.identifier = 'id-mything';
+        // obj.position.set(0, 0, -10);
+        // scene.add(obj);
+        // this.sphere = new Mesh(
         //     new SphereGeometry(8.0, 32, 32),
         //     new MeshBasicMaterial({
         //       color: 0x00FF00,
         //       wireframe: true,
         //     }),
         // );
-        // sphere.position.set(0, 0, -10);
-        // // sphere.renderOrder = 99999999;
-        // // sphere.onBeforeRender = function( renderer ) {
-        // //   // console.log('onbefore!!!!!!!!');
-        // //   renderer.clearDepth();
-        // // };
+        // this.sphere.geometry.center();
+        // this.sphere.position.set(0, 0, -10);
+        // // const scene = this.scenes.values().next().value;
+        // scene.add(this.sphere);
+        // sphere.renderOrder = 99999999;
+        // sphere.onBeforeRender = function( renderer ) {
+        //   // console.log('onbefore!!!!!!!!');
+        //   renderer.clearDepth();
+        // };
         // this.scene2 = new Scene();
         // this.scene2.add(sphere);
         // this.snapIndicator = new Mesh(
@@ -57520,7 +57591,6 @@ class Renderer extends EventDispatcher {
         // const geometry = new BufferGeometry().setFromPoints(points);
         // const line = new Line(geometry, material);
         // scene.add(line);
-        console.group('scene', scene.children);
         this.scenes.add(scene);
         const { canvas } = scene;
         const scale = this.scaleFactor;
@@ -60427,6 +60497,9 @@ const ControlsMixin = (ModelViewerElement) => {
         getMaximumFieldOfView() {
             return this[$controls].options.maximumFieldOfView;
         }
+        getWorldPoint(...args) {
+            return this[$renderer].getWorldPoint(...args);
+        }
         setWireframe() {
             return this[$renderer].setWireframe();
         }
@@ -60436,17 +60509,20 @@ const ControlsMixin = (ModelViewerElement) => {
         setVertexNormals() {
             return this[$renderer].setVertexNormals();
         }
-        // toggleWireframe(): void {
-        //   this[$renderer].toggleWireframe();
-        // }
-        // toggleWireframeAndModel(): void {
-        //   this[$renderer].toggleWireframeAndModel();
-        // }
-        startDistanceMeasurementSkeleton(e, measurementHexColor, selectedHexColor) {
-            return this[$renderer].startDistanceMeasurementSkeleton(e, measurementHexColor, selectedHexColor);
+        setInvisibleEdges() {
+            return this[$renderer].setInvisibleEdges();
         }
-        createDistanceMeasurement(params) {
-            return this[$renderer].createDistanceMeasurement(params);
+        setEdges() {
+            return this[$renderer].setEdges();
+        }
+        getScreenPoint(...args) {
+            return this[$renderer].getScreenPoint(...args);
+        }
+        getMeasurePoint(...args) {
+            return this[$renderer].getMeasurePoint(...args);
+        }
+        createDistanceMeasurement(...args) {
+            return this[$renderer].createDistanceMeasurement(...args);
         }
         getChildren() {
             return this[$renderer].getChildren();

@@ -39,6 +39,7 @@ const Viewer = ({ model }) => {
   useEffect(() => { 
     if (viewer3d && model) {
       const url = URL.createObjectURL(model);
+      console.log(model.name);
       viewer3d.loadModel(url, {
         fileName: model.name,
       });

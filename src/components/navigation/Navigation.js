@@ -67,11 +67,7 @@ const Navigation = ({
       <Heading size="md">WebViewer 3D</Heading>
       <Text py={5}>
         In this demo, you are able to open your own 3D models in GLB/GLTF
-        format, or convert{' '}
-        <Link href="https://www.pdf3d.com/file-formats/" isExternal>
-          other formats
-        </Link>{' '}
-        to GLB/GLTF and then open them.
+        format.
       </Text>
       <Upload {...uploadProps}>
         <Button icon={<UploadOutlined />}>Click to upload a .gltf or .glb file</Button>

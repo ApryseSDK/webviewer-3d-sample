@@ -57538,7 +57538,6 @@ class Renderer extends EventDispatcher {
         this.height = 0;
         this.dpr = 1;
         this.foo = [];
-        this.bvhs = [];
         this.edgeLines = [];
         this.isWireframe = false;
         this.isWireframeAndModel = false;
@@ -57638,6 +57637,14 @@ class Renderer extends EventDispatcher {
         const secondPoint = new Vector3(point2.x, point2.y, point2.z);
         const scene = this.scenes.values().next().value;
         const target = scene.target;
+        // We make two new objects for the measurement points and add
+        // them to the scene.target so that they have the correct matrix
+        // relative to the model. So that if the model moves, when panning 
+        // for example, the screen points can be updated according to these
+        // objs added to the target. They MUST be added to the target, adding
+        // to scene won't work. This is because the objs need to be relative 
+        // to the target. Panning is not actually moving the camera, it is 
+        // moving the target.
         const obj1 = new Object3D();
         const obj2 = new Object3D();
         // const obj1 = new Mesh(
@@ -57723,9 +57730,12 @@ class Renderer extends EventDispatcher {
             zPlane: clonedVector.z,
         };
     }
-    // We have to pass in canvas because the model viewer canvas
-    // changes width and height randomly
-    getMeasurePoint(e, canvas, { snapToEdge, }) {
+    getFirstIntWithMouse(e, canvas) {
+        if (!canvas) {
+            return {
+                hit: false,
+            };
+        }
         const pos = this.getCanvasRelativePosition(e, canvas);
         const mouse = {
             x: (pos.x / canvas.width) * 2 - 1,
@@ -57736,15 +57746,166 @@ class Renderer extends EventDispatcher {
         raycaster.setFromCamera(mouse, scene.getCamera());
         const sceneMeshes = [];
         scene.traverse(child => {
-            // if (child.name !== 'measurement_entity' && child.name !==
-            // 'wireframe') {
             if (child.isMesh) {
                 sceneMeshes.push(child);
             }
-            // }
         });
         // calculate objects intersecting the picking ray
         const intersects = raycaster.intersectObjects(sceneMeshes);
+        const firstInt = intersects[0];
+        if (typeof firstInt !== 'undefined') {
+            return {
+                hit: true,
+                intersection: firstInt,
+            };
+        }
+        return {
+            hit: false,
+        };
+    }
+    highlightObject(object) {
+        const scene = this.scenes.values().next().value;
+        const funcs = [];
+        if (object.type === 'Mesh') {
+            if (object.material.emissive) {
+                const oldEmissiveHex = object.material.emissive.getHex();
+                const oldEmissiveIntensity = object.material.emissiveIntensity;
+                funcs.push(() => {
+                    if (object.material.emissive) {
+                        object.material.emissive.setHex(oldEmissiveHex);
+                        object.material.emissiveIntensity = oldEmissiveIntensity;
+                    }
+                });
+                const cloned = object.material.clone();
+                cloned.emissive.setHex('0xffff00');
+                cloned.emissiveIntensity = 0.4;
+                object.material = cloned;
+            }
+        }
+        if (object.children) {
+            object.children.forEach(child => {
+                funcs.push(this.highlightObject(child));
+            });
+        }
+        scene.isDirty = true;
+        return () => {
+            funcs.forEach(func => {
+                func();
+            });
+            scene.isDirty = true;
+        };
+    }
+    setTargetToObjectCenter(object) {
+        const center = new Vector3();
+        // object.geometry.center();
+        let bb = new Box3().setFromObject(object);
+        // World coordinates
+        bb.getCenter(center);
+        // https://stackoverflow.com/questions/63111504/three-js-is-there-any-way-to-take-bounding-box-for-group
+        // object.geometry.computeBoundingBox();
+        // local coordinates
+        // object.geometry.boundingBox.getCenter(center);
+        // // console.log(position, center);
+        // // console.log(position);
+        console.log('center', object);
+        const scene = this.scenes.values().next().value;
+        const target = scene.target;
+        console.log('target', target);
+        // Convert target space
+        // Do this in two steps
+        // Taken from: https://discourse.threejs.org/t/finding-position-of-an-object-relative-to-a-parent/2068/2
+        // object.localToWorld(center);
+        target.worldToLocal(center);
+        // this.sphere = new Mesh(
+        //     new SphereGeometry(0.01, 32, 32),
+        //     new MeshBasicMaterial({
+        //       color: 0x00FF00,
+        //       wireframe: true,
+        //     }),
+        // );
+        // this.sphere.geometry.center();
+        // this.sphere.position.set(1,1,1);
+        // // const scene = this.scenes.values().next().value;
+        // target.add(this.sphere);
+        // this.sphere.position.set(center.x, center.y, center.z);
+        // object.add(this.sphere);
+        // // oldTarget = modelViewerElement.cameraTarget;
+        // scene.setTarget(1, 1, 1);
+        console.log('setting target', center.x, center.y, center.z);
+        scene.setTarget(center.x, center.y, center.z);
+        return scene.target;
+        // // modelViewerElement.cameraTarget = `${center.x}m ${center.y}m ${center.z}m`;    
+    }
+    showAllObjects() {
+        const scene = this.scenes.values().next().value;
+        scene.traverse(child => {
+            if (child.name !== 'wv_entity') {
+                child.visible = true;
+            }
+        });
+        scene.isDirty = true;
+    }
+    hideObject(object) {
+        const scene = this.scenes.values().next().value;
+        object.visible = false;
+        scene.isDirty = true;
+        return () => {
+            object.visible = true;
+            scene.isDirty = true;
+        };
+    }
+    showOnlyObject(object) {
+        const scene = this.scenes.values().next().value;
+        scene.traverse(child => {
+            child.visible = false;
+        });
+        object.visible = true;
+        let parent = object.parent;
+        while (parent) {
+            parent.visible = true;
+            parent = parent.parent;
+        }
+        object.traverse(child => {
+            if (child.name !== 'wv_entity') {
+                child.visible = true;
+            }
+        });
+        scene.isDirty = true;
+        return () => {
+            scene.traverse(child => {
+                if (child.name !== 'wv_entity') {
+                    child.visible = true;
+                }
+            });
+            scene.isDirty = true;
+        };
+    }
+    // We have to pass in canvas because the model viewer canvas
+    // changes width and height randomly
+    getMeasurePoint(e, canvas, { snapToEdge, }) {
+        if (!canvas) {
+            return {
+                hit: false,
+            };
+        }
+        const pos = this.getCanvasRelativePosition(e, canvas);
+        const mouse = {
+            x: (pos.x / canvas.width) * 2 - 1,
+            y: -(pos.y / canvas.height) * 2 + 1,
+        };
+        console.log('mouse-getmeasurepoint', mouse);
+        const scene = this.scenes.values().next().value;
+        // update the picking ray with the camera and mouse position
+        raycaster.setFromCamera(mouse, scene.getCamera());
+        const sceneMeshes = [];
+        scene.traverse(child => {
+            if (child.isMesh) {
+                sceneMeshes.push(child);
+            }
+        });
+        // calculate objects intersecting the picking ray
+        const intersects = raycaster.intersectObjects(sceneMeshes);
+        console.log('intersects', intersects);
         const firstInt = intersects[0];
         if (typeof firstInt !== 'undefined') {
             const vector = this.getClosestVectorToIntersection(firstInt, snapToEdge, canvas);
@@ -57759,6 +57920,7 @@ class Renderer extends EventDispatcher {
             const line = new Line3();
             const closestPointPerLine = new Vector3();
             const intLocalPoint = intersection.point.clone();
+            // important to get snapping to work correctly
             intersection.object.worldToLocal(intLocalPoint);
             this.edgeLines.forEach(edgeLine => {
                 const { position } = edgeLine.geometry.attributes;
@@ -57782,6 +57944,7 @@ class Renderer extends EventDispatcher {
             const dx = closestScreenPoint.x - intScreenPoint.x;
             const dy = closestScreenPoint.y - intScreenPoint.y;
             const distanceBetweenScreenPoints = Math.sqrt((dx * dx) + (dy * dy));
+            // arbitrary distance
             if (distanceBetweenScreenPoints > 11) {
                 return intersection.point;
             }
@@ -57804,43 +57967,17 @@ class Renderer extends EventDispatcher {
         // const worldPoint = intersection.object.localToWorld(vertices[0]);
         // return worldPoint;
     }
-    onDocumentMouseDown(event, canvas, { snapToEdge = false } = {}) {
-        const pos = this.getCanvasRelativePosition(event, canvas);
-        const mouse = {
-            x: (pos.x / canvas.width) * 2 - 1,
-            y: -(pos.y / canvas.height) * 2 + 1,
-        };
-        const scene = this.scenes.values().next().value;
-        // update the picking ray with the camera and mouse position
-        raycaster.setFromCamera(mouse, scene.getCamera());
-        scene.traverse(child => {
-            if (child.name !== 'wireframe') {
-                if (child.isMesh) ;
-            }
-        });
-        // calculate objects intersecting the picking ray
-        const intersects = raycaster.intersectObjects(
-        // scene.children.filter(child => child.name !== 'measurement_group'),
-        scene.children);
-        const firstInt = intersects[0];
-        if (typeof firstInt !== 'undefined') {
-            return {
-                hit: true,
-                intersection: firstInt,
-            };
-        }
-        return {
-            hit: false,
-        };
-    }
     setEdges() {
+        const scene = this.scenes.values().next().value;
         this.edgeLines.forEach(edgeLine => {
             edgeLine.visible = true;
         });
+        scene.isDirty = true;
         return () => {
             this.edgeLines.forEach(edgeLine => {
                 edgeLine.visible = false;
             });
+            scene.isDirty = true;
         };
     }
     setInvisibleEdges() {
@@ -57876,8 +58013,10 @@ class Renderer extends EventDispatcher {
                 funcs.push(() => scene.remove(vn));
             }
         });
+        scene.isDirty = true;
         return () => {
             funcs.forEach(func => func());
+            scene.isDirty = true;
         };
     }
     setWireframe(willSet = true) {
@@ -57893,18 +58032,10 @@ class Renderer extends EventDispatcher {
                 funcs.push(() => child.material = oldMaterial);
             }
         });
-        // if (willSet === true) {
-        //   return () => {
-        //     // this.setWireframe(false);
-        //     scene.traverse(child => {
-        //       if (child.isMesh) {
-        //         child.material = child.oldMaterial;
-        //       }
-        //     });        
-        //   }
-        // }
+        scene.isDirty = true;
         return () => {
             funcs.forEach(func => func());
+            scene.isDirty = true;
         };
     }
     setWireframeAndModel() {
@@ -57949,6 +58080,7 @@ class Renderer extends EventDispatcher {
                 }
             }
         });
+        scene.isDirty = true;
     }
     toggleWireframeAndModel() {
         const scene = this.scenes.values().next().value;
@@ -57976,6 +58108,7 @@ class Renderer extends EventDispatcher {
         else {
             this.foo.forEach(a => a());
         }
+        scene.isDirty = true;
     }
     getChildren() {
         const scene = this.scenes.values().next().value;
@@ -61801,6 +61934,10 @@ class SmoothControls extends EventDispatcher {
         this.camera.aspect = aspect;
         this.camera.updateProjectionMatrix();
     }
+    setRadius2(radius) {
+        this.goalSpherical.radius = radius;
+        // this.spherical.radius = radius;
+    }
     /**
      * Set the absolute orbital goal of the camera. The change will be
      * applied over a number of frames depending on configured acceleration and
@@ -61809,6 +61946,7 @@ class SmoothControls extends EventDispatcher {
      * Returns true if invoking the method will result in the camera changing
      * position and/or rotation, otherwise false.
      */
+    // NOTES BY KRISTIAN: https://irrlicht.sourceforge.io/forum/viewtopic.php?t=17033
     setOrbit(goalTheta = this.goalSpherical.theta, goalPhi = this.goalSpherical.phi, goalRadius = this.goalSpherical.radius) {
         const { minimumAzimuthalAngle, maximumAzimuthalAngle, minimumPolarAngle, maximumPolarAngle, minimumRadius, maximumRadius } = this._options;
         const { theta, phi, radius } = this.goalSpherical;
@@ -61820,6 +61958,8 @@ class SmoothControls extends EventDispatcher {
         }
         const nextPhi = clamp(goalPhi, minimumPolarAngle, maximumPolarAngle);
         const nextRadius = clamp(goalRadius, minimumRadius, maximumRadius);
+        // const nextRadius = goalRadius;
+        // console.log('nextRadius', nextRadius, goalRadius);
         if (nextTheta === theta && nextPhi === phi && nextRadius === radius) {
             return false;
         }
@@ -61891,6 +62031,70 @@ class SmoothControls extends EventDispatcher {
     }
     triggerReRender() {
         this.dispatchEvent({ type: 'change', source: ChangeSource.NONE });
+    }
+    // BY KRISTIAN
+    fitCameraToObject(object, offset) {
+        const center = new Vector3();
+        // object.geometry.computeBoundingSphere();
+        // object.geometry.boundingBox.getCenter(center);
+        const bb = new Box3().setFromObject(object);
+        bb.getCenter(center);
+        // const center = boundingBox.getCenter();
+        const size = new Vector3();
+        bb.getSize(size);
+        // object.geometry.boundingBox.getSize(size);
+        // console.log(center, size);
+        // // get the max side of the bounding box (fits to width OR height as needed )
+        Math.max(size.x, size.y, size.z);
+        this.camera.fov * (Math.PI / 180);
+        // let cameraZ = Math.abs( maxDim / 4 * Math.tan( fov * 2 ) );
+        // cameraZ *= offset; // zoom out a little so that objects don't fill the screen
+        // this.camera.position.z = cameraZ;
+        // const minZ = object.geometry.boundingBox.min.z;
+        // const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
+        // this.camera.far = cameraToFarEdge * 3;
+        // this.camera.updateProjectionMatrix();
+        // object.geometry.computeBoundingSphere();
+        // let bs = object.geometry.boundingSphere;
+        const bs = bb.getBoundingSphere(new Sphere(center));
+        let bsWorld = bs.center.clone();
+        object.localToWorld(bsWorld);
+        let cameraDir = new Vector3();
+        this.camera.getWorldDirection(cameraDir);
+        console.log(cameraDir);
+        console.log(Math.sqrt(cameraDir.x * cameraDir.x + cameraDir.y * cameraDir.y + cameraDir.z * cameraDir.z));
+        let vFoV = this.camera.getEffectiveFOV();
+        let hFoV = this.camera.fov * this.camera.aspect;
+        let FoV = Math.min(vFoV, hFoV);
+        let FoV2 = FoV / 2;
+        let th = FoV2 * Math.PI / 180.0;
+        let sina = Math.sin(th);
+        let R = bs.radius;
+        let FL = R / sina;
+        let cameraOffs = cameraDir.clone();
+        cameraOffs.multiplyScalar(-FL);
+        let newCameraPos = bsWorld.clone().add(cameraOffs);
+        // // Needed to set the position and lookAt
+        // // For camera not to reset when interacting with it
+        // this.camera.position.copy(newCameraPos);
+        // this.camera.lookAt(bsWorld);
+        console.log('wtttttfffffff');
+        // const c = newCameraPos.clone()
+        // The radius is actually the difference between the new position 
+        // and the center of the bounding sphere
+        newCameraPos.sub(bsWorld);
+        // console.log('newCameraPos', c);
+        const { x, y, z } = newCameraPos;
+        const radius = Math.sqrt((x * x) + (y * y) + (z * z));
+        this.goalSpherical;
+        // console.log(theta, phi, radius);
+        console.log(R, radius);
+        // this.adjustOrbit(0, 0, -(radius));
+        // https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function
+        // this.setOrbit(0, 0, radius);
+        console.log('setting radius', radius);
+        this.setRadius2(radius);
+        return this.goalSpherical;
     }
     zoomIn() {
         this.userAdjustOrbit(0, 0, -1 * ZOOM_SENSITIVITY);
@@ -62353,6 +62557,24 @@ const ControlsMixin = (ModelViewerElement) => {
         getMeasurePoint(...args) {
             return this[$renderer].getMeasurePoint(...args);
         }
+        getFirstIntWithMouse(...args) {
+            return this[$renderer].getFirstIntWithMouse(...args);
+        }
+        highlightObject(...args) {
+            return this[$renderer].highlightObject(...args);
+        }
+        hideObject(...args) {
+            return this[$renderer].hideObject(...args);
+        }
+        showAllObjects(...args) {
+            return this[$renderer].showAllObjects(...args);
+        }
+        showOnlyObject(...args) {
+            return this[$renderer].showOnlyObject(...args);
+        }
+        setTargetToObjectCenter(...args) {
+            return this[$renderer].setTargetToObjectCenter(...args);
+        }
         createDistanceMeasurement(...args) {
             return this[$renderer].createDistanceMeasurement(...args);
         }
@@ -62361,6 +62583,9 @@ const ControlsMixin = (ModelViewerElement) => {
         }
         triggerReRender() {
             this[$controls].triggerReRender();
+        }
+        fitCameraToObject(...args) {
+            return this[$controls].fitCameraToObject(...args);
         }
         zoomIn() {
             this[$controls].zoomIn();

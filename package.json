@@ -2,6 +2,7 @@
   "name": "webviewer-3d-sample",
   "version": "1.0.0",
   "private": true,
+  "proxy": "http://pdf3d-lb-806273296.us-west-1.elb.amazonaws.com/",
   "dependencies": {
     "@chakra-ui/react": "^1.6.5",
     "@emotion/react": "^11.4.0",

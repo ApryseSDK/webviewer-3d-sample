@@ -7,6 +7,7 @@ import {
   Text,
   FormLabel,
   FormControl,
+  Button as ChakraButton,
   Spinner,
   Link,
 } from '@chakra-ui/react';
@@ -23,11 +24,13 @@ const { Dragger } = Upload;
 
 const Navigation = ({
   handleOpenFile,
+  handleURL,
   fetchError,
 }) => {
   const [url, setUrl] = useState('');
   const [width, setWidth] = useState(1000);
   const [height, setHeight] = useState(2000);
+  const [modelURL, setModelURL] = useState('');
   const [error, setError] = useState(false);
 
   const draggerProps = {
@@ -42,7 +45,7 @@ const Navigation = ({
       console.log('Dropped files', e.dataTransfer.items);
       e.stopPropagation();
       e.preventDefault();
-      console.log(e.dataTransfer.items);
+      console.log(e.dataTransfer.items[0]);
       try {
         const file = await packGlbFromDataTransfer(e.dataTransfer.items); 
         handleOpenFile(file);
@@ -72,7 +75,9 @@ const Navigation = ({
       <Upload {...uploadProps}>
         <Button icon={<UploadOutlined />}>Click to upload a .gltf or .glb file</Button>
       </Upload>
-      <Heading size="sm">Or</Heading>
+      <div className="heading-container">
+        <Heading size="sm">Or</Heading>
+      </div>
       <Dragger {...draggerProps}>
         <p className="ant-upload-drag-icon">
           <InboxOutlined />
@@ -81,14 +86,29 @@ const Navigation = ({
         <p className="ant-upload-hint">
           Packaging will fail if there are missing files
         </p>
-      </Dragger>   
-
-      {error && (
-        <Text color="red">
-          Please enter a valid URL, width and height and try again.
-        </Text>
-      )}
-      {fetchError ? <Text color="red">{fetchError}</Text> : null}
+      </Dragger> 
+      <div className="heading-container">
+        <Heading size="sm">Or</Heading> 
+      </div>
+      <FormControl id="height">
+        <FormLabel>Load a URL</FormLabel>
+        <Input
+          size="md"
+          onChange={(e) => {
+            setModelURL(e.target.value);
+          }}
+        />
+        <ChakraButton
+          my={3}
+          onClick={() => {
+            if (modelURL !== null) {
+              handleURL(modelURL);
+            }
+          }}
+        >
+          Load the model URL
+        </ChakraButton>
+      </FormControl>       
     </div>
   );
 };

@@ -7,6 +7,7 @@ const App = () => {
 
   const [file, setFile] = React.useState(null);
   const [url, setURL] = React.useState(null);
+  const [errorMessage, setErrorMessage] = React.useState('');
 
   const handleFileChange = (model) => {
     // console.log('model', model);
@@ -99,10 +100,13 @@ const App = () => {
       <Navigation 
         handleOpenFile={handleFileChange}
         handleURL={setURL}
+        errorMessage={errorMessage}
       />
       <Viewer 
         model={file}
         url={url}
+        setErrorMessage={setErrorMessage}
+        setURL={setURL}
       />
     </div>
   );

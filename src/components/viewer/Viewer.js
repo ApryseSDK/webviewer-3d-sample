@@ -4,7 +4,7 @@ import { initialize3dViewer } from '@pdftron/webviewer-3d';
 import './Viewer.css';
 import '../../utils/WVSApiWrapper';
 
-const Viewer = ({ model, url }) => {
+const Viewer = ({ model, url, setURL, setErrorMessage }) => {
   const viewer = useRef(null);
   const [internetExplorerCheck, setInternetExplorerCheck] = useState(false);
   const [viewer3d, setViewer3d] = useState(null);
@@ -96,6 +96,11 @@ const Viewer = ({ model, url }) => {
         viewer3d.loadModel(url2, {
           fileName: 'airboat.gltf',
         });
+        setErrorMessage(null);
+        setURL(null);
+      }).catch(reason => {
+        setErrorMessage(reason);
+        setURL(null);
       });
 
     }

@@ -26,12 +26,13 @@ const Navigation = ({
   handleOpenFile,
   handleURL,
   fetchError,
+  errorMessage,
 }) => {
   const [url, setUrl] = useState('');
   const [width, setWidth] = useState(1000);
   const [height, setHeight] = useState(2000);
   const [modelURL, setModelURL] = useState('');
-  const [error, setError] = useState(false);
+  // const [error, setError] = useState(false);
 
   const draggerProps = {
     name: 'dropFolder',
@@ -109,6 +110,7 @@ const Navigation = ({
           Load the model URL
         </ChakraButton>
       </FormControl>       
+      {errorMessage ? <Text color="red">{errorMessage}</Text> : null}
     </div>
   );
 };

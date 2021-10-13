@@ -51,11 +51,11 @@ const Viewer = ({ model, url, setURL, setErrorMessage }) => {
     if (viewer3d && url) {
       const serverUrl = 'http://pdf3d-lb-806273296.us-west-1.elb.amazonaws.com';
       var request = new XMLHttpRequest();
-      const path = serverUrl + '/blackbox/Get3DPDF?uri=' + url;
-      console.log(path);
+      let path = serverUrl + '/blackbox/Get3DPDF?uri=' + url;
+      // path = path + '&ext=obj'
       // console.log(serverUrl + '/blackbox/Get3DPDF?uri=' + 'https://pdftron.s3.amazonaws.com/custom/test/kristian/airboat.obj');
-      request.open("POST", path, true);
-      request.setRequestHeader('Content-Type', 'application/json');
+      request.open("GET", path, true);
+      // request.setRequestHeader('Content-Type', 'application/json');
       request.withCredentials = true;
 
       const promise = new Promise(function(resolve, reject) {

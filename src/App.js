@@ -10,10 +10,10 @@ const App = () => {
   const [errorMessage, setErrorMessage] = React.useState('');
 
   const handleFileChange = (model) => {
-    // console.log('model', model);
+    // // console.log('model', model);
 
     // const serverUrl = 'http://pdf3d-lb-806273296.us-west-1.elb.amazonaws.com';
-    // const uri = serverUrl + '/blackbox/AuxUpload?type=upload&ext=gltf';
+    // const uri = serverUrl + '/blackbox/AuxUpload?type=upload&ext=obj';
     // const data = new FormData();
     // data.append('file', model, model.name);
 
@@ -48,11 +48,11 @@ const App = () => {
     //   var request2 = new XMLHttpRequest();
     //   let path = serverUrl + '/blackbox/Get3DPDF?uri=' + result;
     //   // path = path.substring(0, path.length - 5);
-    //   // path = path + '&ext=gltf';
+    //   // path = path + '&ext=obj';
     //   console.log(path);
     //   // console.log(serverUrl + '/blackbox/Get3DPDF?uri=' + 'https://pdftron.s3.amazonaws.com/custom/test/kristian/airboat.obj');
-    //   request2.open("POST", path, true);
-    //   request2.setRequestHeader('Content-Type', 'application/json');
+    //   request2.open("GET", path, true);
+    //   // request2.setRequestHeader('Content-Type', 'application/json');
     //   request2.withCredentials = true;
       
     //   const promise2 = new Promise(function(resolve, reject) {

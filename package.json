@@ -8,7 +8,7 @@
     "@emotion/react": "^11.4.0",
     "@emotion/styled": "^11.3.0",
     "@pdftron/webviewer": "^8.1.0-20210902",
-    "@pdftron/webviewer-3d": "^1.5.3",
+    "@pdftron/webviewer-3d": "^1.5.5",
     "antd": "^4.16.13",
     "framer-motion": "^4.1.17",
     "react": "^16.6.0",

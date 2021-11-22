@@ -57537,7 +57537,6 @@ class Renderer extends EventDispatcher {
         this.width = 0;
         this.height = 0;
         this.dpr = 1;
-        this.foo = [];
         this.edgeLines = [];
         this.isWireframe = false;
         this.isWireframeAndModel = false;
@@ -57647,37 +57646,15 @@ class Renderer extends EventDispatcher {
         // moving the target.
         const obj1 = new Object3D();
         const obj2 = new Object3D();
-        // const obj1 = new Mesh(
-        //     new SphereGeometry(0.03),
-        //     new MeshBasicMaterial(),
-        // );
-        // obj1.material.color.setHex('0x000000');
-        // const obj2 = new Mesh(
-        //     new SphereGeometry(0.03),
-        //     new MeshBasicMaterial(),
-        // );
-        // obj2.material.color.setHex('0x000000');
-        // obj2.identifier = 'id-mything';
-        // obj2.position.set(point2.x, point2.y, point2.z);
-        // target.add(obj1);
-        // This works for the point above
-        // scene.add(obj1);
         target.add(obj1);
         obj1.updateMatrixWorld();
-        // const newPoint1 = firstPoint.clone();
         obj1.worldToLocal(firstPoint);
         obj1.position.copy(firstPoint);
         target.add(obj2);
         obj2.updateMatrixWorld();
-        // const newPoint2 = secondPoint.clone();
         obj2.worldToLocal(secondPoint);
         obj2.position.copy(secondPoint);
         scene.isDirty = true;
-        // // Midpoint: https://stackoverflow.com/a/58580387
-        // let dir = secondPoint.clone().sub(firstPoint);
-        // const length = dir.length();
-        // dir = dir.normalize().multiplyScalar(length * .5);
-        // const midPoint = firstPoint.clone().add(dir);
         const getScreenPoints = (screenWidth, screenHeight) => {
             const camera = scene.getCamera();
             if (scene.autoUpdate === true)
@@ -57705,14 +57682,11 @@ class Renderer extends EventDispatcher {
     getWorldPoint(screenPoint, zPlane, canvas) {
         const scene = this.scenes.values().next().value;
         const camera = scene.getCamera();
-        // const pos = this.getCanvasRelativePosition({
-        //   clientX: screenPoint.x,
-        //   clientY: screenPoint.y,
-        // }, canvas);
         const mouse = {
             x: (screenPoint.x / canvas.width) * 2 - 1,
             y: -(screenPoint.y / canvas.height) * 2 + 1,
         };
+        // screenPoint + zPlane gives you a world point after unprojecting with the camera
         const vector = new Vector3(mouse.x, mouse.y, zPlane).unproject(camera);
         return vector;
     }
@@ -57723,12 +57697,18 @@ class Renderer extends EventDispatcher {
         clonedVector.copy(point);
         // Taken from:
         // https://discourse.threejs.org/t/how-to-converting-world-coordinates-to-2d-mouse-coordinates-in-threejs/2251
+        // world point projected with a camera 
+        // z value is the zPlane point
         clonedVector.project(camera);
         return {
             x: (clonedVector.x + 1) * screenWidth / 2,
             y: -(clonedVector.y - 1) * screenHeight / 2,
             zPlane: clonedVector.z,
         };
+    }
+    forceRender() {
+        const scene = this.scenes.values().next().value;
+        scene.isDirty = true;
     }
     getFirstIntWithMouse(e, canvas) {
         if (!canvas) {
@@ -57765,12 +57745,12 @@ class Renderer extends EventDispatcher {
     }
     highlightObject(object) {
         const scene = this.scenes.values().next().value;
-        const funcs = [];
+        const undoFunctions = [];
         if (object.type === 'Mesh') {
             if (object.material.emissive) {
                 const oldEmissiveHex = object.material.emissive.getHex();
                 const oldEmissiveIntensity = object.material.emissiveIntensity;
-                funcs.push(() => {
+                undoFunctions.push(() => {
                     if (object.material.emissive) {
                         object.material.emissive.setHex(oldEmissiveHex);
                         object.material.emissiveIntensity = oldEmissiveIntensity;
@@ -57784,12 +57764,12 @@ class Renderer extends EventDispatcher {
         }
         if (object.children) {
             object.children.forEach(child => {
-                funcs.push(this.highlightObject(child));
+                undoFunctions.push(this.highlightObject(child));
             });
         }
         scene.isDirty = true;
         return () => {
-            funcs.forEach(func => {
+            undoFunctions.forEach(func => {
                 func();
             });
             scene.isDirty = true;
@@ -57797,44 +57777,16 @@ class Renderer extends EventDispatcher {
     }
     setTargetToObjectCenter(object) {
         const center = new Vector3();
-        // object.geometry.center();
-        let bb = new Box3().setFromObject(object);
+        let boundingBox = new Box3().setFromObject(object);
         // World coordinates
-        bb.getCenter(center);
-        // https://stackoverflow.com/questions/63111504/three-js-is-there-any-way-to-take-bounding-box-for-group
-        // object.geometry.computeBoundingBox();
-        // local coordinates
-        // object.geometry.boundingBox.getCenter(center);
-        // // console.log(position, center);
-        // // console.log(position);
-        console.log('center', object);
+        boundingBox.getCenter(center);
         const scene = this.scenes.values().next().value;
         const target = scene.target;
-        console.log('target', target);
-        // Convert target space
-        // Do this in two steps
-        // Taken from: https://discourse.threejs.org/t/finding-position-of-an-object-relative-to-a-parent/2068/2
-        // object.localToWorld(center);
+        // Change to local coordinates because that seems
+        // to be the camera
         target.worldToLocal(center);
-        // this.sphere = new Mesh(
-        //     new SphereGeometry(0.01, 32, 32),
-        //     new MeshBasicMaterial({
-        //       color: 0x00FF00,
-        //       wireframe: true,
-        //     }),
-        // );
-        // this.sphere.geometry.center();
-        // this.sphere.position.set(1,1,1);
-        // // const scene = this.scenes.values().next().value;
-        // target.add(this.sphere);
-        // this.sphere.position.set(center.x, center.y, center.z);
-        // object.add(this.sphere);
-        // // oldTarget = modelViewerElement.cameraTarget;
-        // scene.setTarget(1, 1, 1);
-        console.log('setting target', center.x, center.y, center.z);
         scene.setTarget(center.x, center.y, center.z);
-        return scene.target;
-        // // modelViewerElement.cameraTarget = `${center.x}m ${center.y}m ${center.z}m`;    
+        // return scene.getCameraTarget();    
     }
     showAllObjects() {
         const scene = this.scenes.values().next().value;
@@ -57905,7 +57857,6 @@ class Renderer extends EventDispatcher {
         });
         // calculate objects intersecting the picking ray
         const intersects = raycaster.intersectObjects(sceneMeshes);
-        console.log('intersects', intersects);
         const firstInt = intersects[0];
         if (typeof firstInt !== 'undefined') {
             const vector = this.getClosestVectorToIntersection(firstInt, snapToEdge, canvas);
@@ -57927,7 +57878,7 @@ class Renderer extends EventDispatcher {
                 for (let i = 0; i < position.count - 1; i += 2) {
                     line.start.fromBufferAttribute(position, i);
                     line.end.fromBufferAttribute(position, i + 1);
-                    // clamp to true because if not then point is wrong
+                    // clamp to true because this is a finite line
                     line.closestPointToPoint(intLocalPoint, true, closestPointPerLine);
                     intersection.object.localToWorld(closestPointPerLine);
                     const distance = closestPointPerLine.distanceTo(intersection.point);
@@ -57951,21 +57902,6 @@ class Renderer extends EventDispatcher {
             return closestVector;
         }
         return intersection.point;
-        // const faceData =
-        //   [intersection.face.a, intersection.face.b, intersection.face.c];
-        // const {position} = intersection.object.geometry.attributes;
-        // const vertices = faceData.map(vId => {
-        //   const vector = new Vector3();
-        //   vector.fromBufferAttribute(position, vId);
-        //   vector.distance = intersection.object.localToWorld(vector.clone())
-        //                         .distanceTo(intersection.point);
-        //   return vector;
-        // });
-        // vertices.sort(function(a, b) {
-        //   return a.distance - b.distance;
-        // });
-        // const worldPoint = intersection.object.localToWorld(vertices[0]);
-        // return worldPoint;
     }
     setEdges() {
         const scene = this.scenes.values().next().value;
@@ -58019,7 +57955,7 @@ class Renderer extends EventDispatcher {
             scene.isDirty = true;
         };
     }
-    setWireframe(willSet = true) {
+    setWireframe() {
         const scene = this.scenes.values().next().value;
         const funcs = [];
         // https://discourse.threejs.org/t/proper-way-of-adding-and-removing-a-wireframe/4600
@@ -58051,64 +57987,11 @@ class Renderer extends EventDispatcher {
                 funcs.push(() => child.remove(wireframe));
             }
         });
+        scene.isDirty = true;
         return () => {
             funcs.forEach(func => func());
+            scene.isDirty = true;
         };
-    }
-    toggleWireframe() {
-        const scene = this.scenes.values().next().value;
-        // https://discourse.threejs.org/t/proper-way-of-adding-and-removing-a-wireframe/4600
-        // https://stackoverflow.com/questions/37280995/threejs-remove-texture
-        const wireframeMaterial = new MeshBasicMaterial({ color: 0xffffff, wireframe: true });
-        if (this.isWireframeAndModel) {
-            this.toggleWireframeAndModel();
-        }
-        if (!this.isWireframe) {
-            this.isWireframe = true;
-        }
-        else {
-            this.isWireframe = false;
-        }
-        scene.traverse(child => {
-            if (child.isMesh) {
-                if (this.isWireframe) {
-                    child.oldMaterial = child.material;
-                    child.material = wireframeMaterial;
-                }
-                else {
-                    child.material = child.oldMaterial;
-                }
-            }
-        });
-        scene.isDirty = true;
-    }
-    toggleWireframeAndModel() {
-        const scene = this.scenes.values().next().value;
-        if (this.isWireframe) {
-            this.toggleWireframe();
-        }
-        if (!this.isWireframeAndModel) {
-            this.isWireframeAndModel = true;
-        }
-        else {
-            this.isWireframeAndModel = false;
-        }
-        if (this.isWireframeAndModel) {
-            scene.traverse(child => {
-                if (child.isMesh) {
-                    const wireframeGeometry = new WireframeGeometry(child.geometry);
-                    const wireframeMaterial = new LineBasicMaterial({ color: 0xFFFFFF });
-                    const wireframe = new LineSegments(wireframeGeometry, wireframeMaterial);
-                    wireframe.name = 'wireframe';
-                    child.add(wireframe);
-                    this.foo.push(() => child.remove(wireframe));
-                }
-            });
-        }
-        else {
-            this.foo.forEach(a => a());
-        }
-        scene.isDirty = true;
     }
     getChildren() {
         const scene = this.scenes.values().next().value;
@@ -58116,7 +57999,8 @@ class Renderer extends EventDispatcher {
         while (children && children.length === 1) {
             children = children[0].children;
         }
-        return children;
+        const parent = scene.children[0].children[0].children[0];
+        return { children, parent };
     }
     get canRender() {
         return this.threeRenderer != null;
@@ -58225,8 +58109,12 @@ class Renderer extends EventDispatcher {
         // );
         // this.sphere.geometry.center();
         // this.sphere.position.set(0, 0, -10);
-        // // const scene = this.scenes.values().next().value;
+        // const scene = this.scenes.values().next().value;
         // scene.add(this.sphere);
+        // console.log('skdfjlksdfjlsdfjsdf----', scene.children[0].children[0].children);
+        // const boxHelper = new BoxHelper(g);
+        // boxHelper.material.color.set( 0xffffff );
+        // scene.add(boxHelper);
         // sphere.renderOrder = 99999999;
         // sphere.onBeforeRender = function( renderer ) {
         //   // console.log('onbefore!!!!!!!!');
@@ -61639,11 +61527,13 @@ const style = (config) => {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// Default_options for the setting( The old polarAngle was between Math.PI/8( 180/8 deg ) and Math.PI - Math.PI / 8 ( 180deg - (180 / 8)deg ) )
+// So I updated the default max and min polarAngle to -Infinity and Infinity.
 const DEFAULT_OPTIONS = Object.freeze({
     minimumRadius: 0,
     maximumRadius: Infinity,
-    minimumPolarAngle: Math.PI / 8,
-    maximumPolarAngle: Math.PI - Math.PI / 8,
+    minimumPolarAngle: -Infinity,
+    maximumPolarAngle: Infinity,
     minimumAzimuthalAngle: -Infinity,
     maximumAzimuthalAngle: Infinity,
     minimumFieldOfView: 10,
@@ -61934,10 +61824,6 @@ class SmoothControls extends EventDispatcher {
         this.camera.aspect = aspect;
         this.camera.updateProjectionMatrix();
     }
-    setRadius2(radius) {
-        this.goalSpherical.radius = radius;
-        // this.spherical.radius = radius;
-    }
     /**
      * Set the absolute orbital goal of the camera. The change will be
      * applied over a number of frames depending on configured acceleration and
@@ -61958,15 +61844,12 @@ class SmoothControls extends EventDispatcher {
         }
         const nextPhi = clamp(goalPhi, minimumPolarAngle, maximumPolarAngle);
         const nextRadius = clamp(goalRadius, minimumRadius, maximumRadius);
-        // const nextRadius = goalRadius;
-        // console.log('nextRadius', nextRadius, goalRadius);
         if (nextTheta === theta && nextPhi === phi && nextRadius === radius) {
             return false;
         }
         this.goalSpherical.theta = nextTheta;
         this.goalSpherical.phi = nextPhi;
         this.goalSpherical.radius = nextRadius;
-        this.goalSpherical.makeSafe();
         this.isUserChange = false;
         return true;
     }
@@ -62033,67 +61916,60 @@ class SmoothControls extends EventDispatcher {
         this.dispatchEvent({ type: 'change', source: ChangeSource.NONE });
     }
     // BY KRISTIAN
-    fitCameraToObject(object, offset) {
+    fitCameraToObject(object) {
+        // TAKEN FROM: https://stackoverflow.com/a/64571830
+        // TODO: Need to convert to spherical coordinates from cartesian: https://irrlicht.sourceforge.io/forum/viewtopic.php?t=17033
         const center = new Vector3();
-        // object.geometry.computeBoundingSphere();
-        // object.geometry.boundingBox.getCenter(center);
         const bb = new Box3().setFromObject(object);
         bb.getCenter(center);
-        // const center = boundingBox.getCenter();
         const size = new Vector3();
         bb.getSize(size);
-        // object.geometry.boundingBox.getSize(size);
-        // console.log(center, size);
-        // // get the max side of the bounding box (fits to width OR height as needed )
-        Math.max(size.x, size.y, size.z);
-        this.camera.fov * (Math.PI / 180);
-        // let cameraZ = Math.abs( maxDim / 4 * Math.tan( fov * 2 ) );
-        // cameraZ *= offset; // zoom out a little so that objects don't fill the screen
-        // this.camera.position.z = cameraZ;
-        // const minZ = object.geometry.boundingBox.min.z;
-        // const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
-        // this.camera.far = cameraToFarEdge * 3;
-        // this.camera.updateProjectionMatrix();
-        // object.geometry.computeBoundingSphere();
-        // let bs = object.geometry.boundingSphere;
         const bs = bb.getBoundingSphere(new Sphere(center));
         let bsWorld = bs.center.clone();
         object.localToWorld(bsWorld);
         let cameraDir = new Vector3();
         this.camera.getWorldDirection(cameraDir);
-        console.log(cameraDir);
-        console.log(Math.sqrt(cameraDir.x * cameraDir.x + cameraDir.y * cameraDir.y + cameraDir.z * cameraDir.z));
+        // console.log(cameraDir);
+        // console.log(Math.sqrt(cameraDir.x*cameraDir.x + cameraDir.y*cameraDir.y+ cameraDir.z*cameraDir.z));
         let vFoV = this.camera.getEffectiveFOV();
         let hFoV = this.camera.fov * this.camera.aspect;
         let FoV = Math.min(vFoV, hFoV);
         let FoV2 = FoV / 2;
+        console.log('-0-0-0-0-0-0', FoV, this.goalLogFov, this.getFieldOfView());
         let th = FoV2 * Math.PI / 180.0;
         let sina = Math.sin(th);
         let R = bs.radius;
         let FL = R / sina;
         let cameraOffs = cameraDir.clone();
         cameraOffs.multiplyScalar(-FL);
-        let newCameraPos = bsWorld.clone().add(cameraOffs);
-        // // Needed to set the position and lookAt
-        // // For camera not to reset when interacting with it
+        // console.log(cameraOffs, bsWorld);
+        // let newCameraPos = bsWorld.clone().add(cameraOffs);
+        // console.log(newCameraPos);
+        // // Note: This doesn't seem to be neeeded
+        // // // Needed to set the position and lookAt
+        // // // For camera not to reset when interacting with it
         // this.camera.position.copy(newCameraPos);
         // this.camera.lookAt(bsWorld);
-        console.log('wtttttfffffff');
-        // const c = newCameraPos.clone()
-        // The radius is actually the difference between the new position 
-        // and the center of the bounding sphere
-        newCameraPos.sub(bsWorld);
-        // console.log('newCameraPos', c);
-        const { x, y, z } = newCameraPos;
-        const radius = Math.sqrt((x * x) + (y * y) + (z * z));
-        this.goalSpherical;
+        // // const c = newCameraPos.clone()
+        // // The radius is actually the difference between the new position
+        // // and the center of the bounding sphere
+        // // newCameraPos.sub(bsWorld);
+        // // console.log(newCameraPos);
+        // let newCameraPos = cameraOffs;
+        // const { x, y, z } = newCameraPos;
+        // const theta = Math.atan2(y, x);
+        // const phi = Math.sqrt(x * x + y * y) / z;
+        // const radius = Math.sqrt((x * x) + (y * y) + (z * z));
+        // console.log('vFov hFov', vFoV, hFoV, FL, this.getFieldOfView());
         // console.log(theta, phi, radius);
-        console.log(R, radius);
         // this.adjustOrbit(0, 0, -(radius));
         // https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function
         // this.setOrbit(0, 0, radius);
-        console.log('setting radius', radius);
-        this.setRadius2(radius);
+        this.goalSpherical.radius = FL;
+        console.log('setting spherical2222');
+        this.spherical.radius = FL;
+        this.jumpToGoal();
+        this.setFieldOfView(FoV);
         return this.goalSpherical;
     }
     zoomIn() {
@@ -62121,8 +61997,14 @@ class SmoothControls extends EventDispatcher {
             this.spherical.theta -= Math.sign(dTheta) * 2 * Math.PI;
         }
         this.spherical.theta = this.thetaDamper.update(this.spherical.theta, this.goalSpherical.theta, delta, Math.PI);
-        this.spherical.phi = this.phiDamper.update(this.spherical.phi, this.goalSpherical.phi, delta, maximumPolarAngle);
+        // the last parameter of the this.phiDampler.update() function was the maximumPolarAngle
+        // maximumPolarAngle was Math.PI - Math.PI / 8, but now it is Infinity.
+        // This parameter is the smooth speed when the user rotate model.
+        // So I have updated the code as Math.PI(similar value of old one)
+        this.spherical.phi = this.phiDamper.update(this.spherical.phi, this.goalSpherical.phi, delta, Math.PI);
+        // console.log('before update----', this.spherical.radius);
         this.spherical.radius = this.radiusDamper.update(this.spherical.radius, this.goalSpherical.radius, delta, maximumRadius);
+        // console.log('update----', this.spherical.radius);
         this.logFov = this.fovDamper.update(this.logFov, this.goalLogFov, delta, 1);
         this.moveCamera();
     }
@@ -62134,7 +62016,6 @@ class SmoothControls extends EventDispatcher {
     }
     moveCamera() {
         // Derive the new camera position from the updated spherical:
-        this.spherical.makeSafe();
         this.camera.position.setFromSpherical(this.spherical);
         this.camera.setRotationFromEuler(new Euler(this.spherical.phi - Math.PI / 2, this.spherical.theta, 0, 'YXZ'));
         if (this.camera.fov !== Math.exp(this.logFov)) {
@@ -62366,7 +62247,7 @@ const minCameraOrbitIntrinsics = (element) => {
     return {
         basis: [
             numberNode(-Infinity, 'rad'),
-            numberNode(Math.PI / 8, 'rad'),
+            numberNode(-Infinity, 'rad'),
             numberNode(radius, 'm')
         ],
         keywords: { auto: [null, null, null] }
@@ -62379,7 +62260,7 @@ const maxCameraOrbitIntrinsics = (element) => {
     return {
         basis: [
             numberNode(Infinity, 'rad'),
-            numberNode(Math.PI - Math.PI / 8, 'rad'),
+            numberNode(Infinity, 'rad'),
             numberNode(defaultRadius, 'm')
         ],
         keywords: { auto: [null, null, null] }
@@ -62556,6 +62437,9 @@ const ControlsMixin = (ModelViewerElement) => {
         }
         getMeasurePoint(...args) {
             return this[$renderer].getMeasurePoint(...args);
+        }
+        forceRender(...args) {
+            return this[$renderer].forceRender(...args);
         }
         getFirstIntWithMouse(...args) {
             return this[$renderer].getFirstIntWithMouse(...args);

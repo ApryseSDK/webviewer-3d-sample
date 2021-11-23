@@ -4,5 +4,10 @@
   justify-content: space-between;
   width: 400px;
   height: 450px;
-  padding: 10px;
+  padding: 10px; 
 }
+
+.heading-container {
+  padding: 10px 0px;
+} 
+
